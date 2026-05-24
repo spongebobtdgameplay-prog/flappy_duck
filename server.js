@@ -94,38 +94,71 @@ function NormalizeName(Name) {
   return Trimmed.slice(0, 10);
 }
 
-function EnsurePlayer(SocketId, Data) {
+function CreatePlayer(SocketId, Data) {
+  return {
+    id: SocketId,
+    x: typeof Data.x === "number" ? Data.x : 100,
+    y: typeof Data.y === "number" ? Data.y : 200,
+    name: NormalizeName(Data.name),
+    score: typeof Data.score === "number" ? Data.score : 0,
+    isDead: typeof Data.isDead === "boolean" ? Data.isDead : false
+  };
+}
+
+function UpdatePlayer(SocketId, Data) {
   if (!Players[SocketId]) {
-    Players[SocketId] = {
-      id: SocketId,
-      x: typeof Data.x === "number" ? Data.x : 100,
-      y: typeof Data.y === "number" ? Data.y : 200,
-      name: NormalizeName(Data.name),
-      score: 0,
-      isDead: false,
-      connectedAt: Date.now()
-    };
-    return true;
+    Players[SocketId] = CreatePlayer(SocketId, Data);
+    return;
   }
 
-  Players[SocketId].x = typeof Data.x === "number" ? Data.x : Players[SocketId].x;
-  Players[SocketId].y = typeof Data.y === "number" ? Data.y : Players[SocketId].y;
-  Players[SocketId].name = NormalizeName(Data.name ?? Players[SocketId].name);
+  if (typeof Data.x === "number") Players[SocketId].x = Data.x;
+  if (typeof Data.y === "number") Players[SocketId].y = Data.y;
   if (typeof Data.score === "number") Players[SocketId].score = Data.score;
   if (typeof Data.isDead === "boolean") Players[SocketId].isDead = Data.isDead;
 
-  return false;
+  if (typeof Data.name === "string") {
+    const CleanName = NormalizeName(Data.name);
+    if (CleanName) Players[SocketId].name = CleanName;
+  }
+}
+
+function EmitPlayerState(SocketId, Target) {
+  const Player = Players[SocketId];
+  if (!Player) return;
+
+  Target.emit("player-state", {
+    id: Player.id,
+    x: Player.x,
+    y: Player.y,
+    name: Player.name,
+    score: Player.score,
+    isDead: Player.isDead
+  });
+}
+
+function BroadcastPlayerState(SocketId) {
+  const Player = Players[SocketId];
+  if (!Player) return;
+
+  io.emit("player-state", {
+    id: Player.id,
+    x: Player.x,
+    y: Player.y,
+    name: Player.name,
+    score: Player.score,
+    isDead: Player.isDead
+  });
 }
 
 io.on("connection", (socket) => {
-  console.log(`Player connected: ${socket.id}`);
-
   socket.on("join-game", (Data = {}) => {
-    const IsNewPlayer = EnsurePlayer(socket.id, Data);
-    socket.data.joined = true;
+    const IsNewPlayer = !Players[socket.id];
+    Players[socket.id] = CreatePlayer(socket.id, Data);
+
+    EmitPlayerState(socket.id, socket);
+    socket.emit("current-players", ClonePlayers());
 
     if (IsNewPlayer) {
-      socket.emit("current-players", ClonePlayers());
       socket.broadcast.emit("player-joined", {
         id: Players[socket.id].id,
         x: Players[socket.id].x,
@@ -135,7 +168,7 @@ io.on("connection", (socket) => {
         isDead: Players[socket.id].isDead
       });
     } else {
-      socket.broadcast.emit("player-moved", {
+      socket.broadcast.emit("player-state", {
         id: Players[socket.id].id,
         x: Players[socket.id].x,
         y: Players[socket.id].y,
@@ -147,36 +180,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("update-position", (Data = {}) => {
-    if (!Players[socket.id]) {
-      Players[socket.id] = {
-        id: socket.id,
-        x: 100,
-        y: 200,
-        name: "Duck",
-        score: 0,
-        isDead: false,
-        connectedAt: Date.now()
-      };
-    }
-
-    if (typeof Data.x === "number") Players[socket.id].x = Data.x;
-    if (typeof Data.y === "number") Players[socket.id].y = Data.y;
-    if (typeof Data.score === "number") Players[socket.id].score = Data.score;
-    if (typeof Data.isDead === "boolean") Players[socket.id].isDead = Data.isDead;
-
-    socket.broadcast.emit("player-moved", {
-      id: Players[socket.id].id,
-      x: Players[socket.id].x,
-      y: Players[socket.id].y,
-      name: Players[socket.id].name,
-      score: Players[socket.id].score,
-      isDead: Players[socket.id].isDead
-    });
+    UpdatePlayer(socket.id, Data);
+    BroadcastPlayerState(socket.id);
   });
 
   socket.on("disconnect", () => {
-    console.log(`Player disconnected: ${socket.id}`);
-
     if (Players[socket.id]) {
       delete Players[socket.id];
       io.emit("player-disconnected", socket.id);
