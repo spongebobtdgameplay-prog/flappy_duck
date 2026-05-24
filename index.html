@@ -1,201 +1,391 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Flappy Multiplayer Fix</title>
-<style>
-body { margin:0; overflow:hidden; background:#4ec0ca; }
-canvas { display:block; margin:auto; background:#70c5ce; }
-</style>
+  <meta charset="UTF-8">
+  <title>True Multiplayer Flappy Duck</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    body {
+      margin: 0;
+      background: #4ec0ca;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    #ui {
+      margin-bottom: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      user-select: none;
+    }
+    #name {
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+      font-weight: bold;
+    }
+    canvas {
+      display: block;
+      background: #70c5ce;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      border-radius: 4px;
+    }
+  </style>
 </head>
 <body>
+  <div id="ui">
+    Name: <input id="name" value="Duck" maxlength="10">
+    <span style="margin-left: 20px;">Score: <span id="scoreVal">0</span></span>
+  </div>
 
-<canvas id="c" width="400" height="600"></canvas>
+  <canvas id="game" width="400" height="600"></canvas>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io(window.location.origin);
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreElement = document.getElementById("scoreVal");
+    const nameInput = document.getElementById("name");
 
-const socket = io();
+    let Players = {};
+    let RemoteBuffer = {};
+    let IsGameOver = false;
+    let Score = 0;
 
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+    let Bird = { x: 100, y: 200, v: 0, radius: 14 };
+    const Gravity = 750;
+    const Jump = -240;
 
-let bird = { x:100, y:200, v:0, dead:false };
-let gravity = 700;
-let jump = -250;
+    let Pipes = [];
+    let PipeTimer = 0;
+    const PipeSpawnRate = 1.8;
+    const PipeSpeed = 140;
+    const PipeGap = 140;
 
-let players = {};
-let buffer = {};
+    let CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
+    let PipeSequenceCounter = 0;
 
-let pipes = [];
-let pipeTimer = 0;
-let pipeSpeed = 140;
-let pipeGap = 140;
+    const SnapshotDelay = 100;
+    const MaxHistory = 12;
+    const OffscreenPad = 50;
+    const DeadTimeout = 5000;
 
-const MAX_BUFFER = 10;
-
-socket.on("init", (data) => {
-  players = data;
-  buffer = {};
-
-  for (const id in data) {
-    buffer[id] = [{
-      x: data[id].x,
-      y: data[id].y,
-      t: Date.now()
-    }];
-  }
-});
-
-socket.on("state", (p) => {
-  if (!buffer[p.id]) buffer[p.id] = [];
-
-  buffer[p.id].push({
-    x: p.x,
-    y: p.y,
-    score: p.score,
-    isDead: p.isDead,
-    t: Date.now()
-  });
-
-  if (buffer[p.id].length > MAX_BUFFER) {
-    buffer[p.id].shift();
-  }
-
-  players[p.id] = p;
-});
-
-socket.on("remove", (id) => {
-  delete players[id];
-  delete buffer[id];
-});
-
-function send() {
-  socket.emit("update", {
-    x: bird.x,
-    y: bird.y,
-    score: 0,
-    isDead: bird.dead
-  });
-}
-
-document.addEventListener("keydown", (e) => {
-  if (e.code === "Space") {
-    if (bird.dead) return;
-    bird.v = jump;
-  }
-});
-
-function reset() {
-  bird.y = 200;
-  bird.v = 0;
-  bird.dead = false;
-  pipes = [];
-  socket.emit("update", {
-    x: bird.x,
-    y: bird.y,
-    score: 0,
-    isDead: false
-  });
-}
-
-function getInterp(arr, time) {
-  if (!arr || arr.length < 2) return arr?.[0];
-
-  let a = arr[0], b = arr[1];
-
-  for (let i = 0; i < arr.length - 1; i++) {
-    if (arr[i].t <= time && arr[i+1].t >= time) {
-      a = arr[i];
-      b = arr[i+1];
-      break;
-    }
-  }
-
-  let t = (time - a.t) / Math.max(1, b.t - a.t);
-
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t
-  };
-}
-
-let last = performance.now();
-
-function loop(t) {
-  let dt = (t - last) / 1000;
-  last = t;
-
-  ctx.clearRect(0,0,400,600);
-
-  // FREEZE WORLD ON DEATH (IMPORTANT FIX)
-  if (!bird.dead) {
-
-    bird.v += gravity * dt;
-    bird.y += bird.v * dt;
-
-    if (bird.y > 580) {
-      bird.dead = true;
+    function SeededRandom(Seed) {
+      let X = Math.sin(Seed++) * 10000;
+      return X - Math.floor(X);
     }
 
-    pipeTimer += dt;
+    function PushSnapshot(Id, Data) {
+      if (!RemoteBuffer[Id]) {
+        RemoteBuffer[Id] = [];
+      }
 
-    if (pipeTimer > 1.5) {
-      pipeTimer = 0;
-      let h = 100 + Math.random() * 250;
+      RemoteBuffer[Id].push({
+        x: Data.x,
+        y: Data.y,
+        score: Data.score || 0,
+        isDead: !!Data.isDead,
+        name: Data.name || "Duck",
+        t: Date.now()
+      });
 
-      pipes.push({
-        x: 400,
-        top: h,
-        bottom: h + pipeGap
+      while (RemoteBuffer[Id].length > MaxHistory) {
+        RemoteBuffer[Id].shift();
+      }
+    }
+
+    function SendJoin() {
+      if (!socket.connected) return;
+
+      socket.emit("join-game", {
+        name: nameInput.value || "Duck",
+        x: Bird.x,
+        y: Bird.y,
+        score: Score,
+        isDead: IsGameOver
       });
     }
 
-    for (let p of pipes) {
-      p.x -= pipeSpeed * dt;
+    socket.on("connect", () => {
+      SendJoin();
+    });
+
+    socket.on("current-players", (ServerPlayers) => {
+      Players = ServerPlayers || {};
+      RemoteBuffer = {};
+
+      const Now = Date.now();
+      for (const Id in ServerPlayers) {
+        RemoteBuffer[Id] = [{
+          x: ServerPlayers[Id].x,
+          y: ServerPlayers[Id].y,
+          score: ServerPlayers[Id].score || 0,
+          isDead: !!ServerPlayers[Id].isDead,
+          name: ServerPlayers[Id].name || "Duck",
+          t: Now
+        }];
+      }
+    });
+
+    socket.on("player-joined", (Player) => {
+      Players[Player.id] = Player;
+      PushSnapshot(Player.id, Player);
+    });
+
+    socket.on("player-state", (Player) => {
+      Players[Player.id] = Player;
+      PushSnapshot(Player.id, Player);
+    });
+
+    socket.on("player-disconnected", (Id) => {
+      delete Players[Id];
+      delete RemoteBuffer[Id];
+    });
+
+    function EmitNetworkUpdate() {
+      if (!socket.connected) return;
+
+      socket.emit("update-position", {
+        x: Bird.x,
+        y: Bird.y,
+        score: Score,
+        isDead: IsGameOver,
+        name: nameInput.value || "Duck"
+      });
     }
 
-    pipes = pipes.filter(p => p.x > -60);
+    nameInput.addEventListener("input", () => {
+      SendJoin();
+    });
 
-    send();
-  }
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (IsGameOver) {
+          ResetGame();
+        } else {
+          Bird.v = Jump;
+        }
+      }
+    });
 
-  // pipes ALWAYS render locally but stop updating on death
-  for (let p of pipes) {
-    ctx.fillStyle = "green";
-    ctx.fillRect(p.x, 0, 50, p.top);
-    ctx.fillRect(p.x, p.bottom, 50, 600);
-  }
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (IsGameOver) {
+        ResetGame();
+      } else {
+        Bird.v = Jump;
+      }
+    });
 
-  // local player
-  ctx.fillStyle = "yellow";
-  ctx.beginPath();
-  ctx.arc(bird.x, bird.y, 14, 0, Math.PI*2);
-  ctx.fill();
+    function ResetGame() {
+      Bird.y = 200;
+      Bird.v = 0;
+      IsGameOver = false;
+      Score = 0;
+      scoreElement.innerText = Score;
+      CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
+      PipeSequenceCounter = 0;
+      SendJoin();
+      EmitNetworkUpdate();
+    }
 
-  // remote players FIXED
-  const renderTime = Date.now() - 80;
+    function GetInterpolatedRemotePlayer(History, RenderTime) {
+      if (!History || History.length === 0) return null;
+      if (History.length === 1) return History[0];
 
-  for (const id in buffer) {
-    if (id === socket.id) continue;
+      if (RenderTime <= History[0].t) return History[0];
+      if (RenderTime >= History[History.length - 1].t) return History[History.length - 1];
 
-    const arr = buffer[id];
-    if (!arr?.length) continue;
+      let A = History[0];
+      let B = History[1];
 
-    const p = getInterp(arr, renderTime);
-    if (!p) continue;
+      for (let i = 0; i < History.length - 1; i++) {
+        if (History[i].t <= RenderTime && History[i + 1].t >= RenderTime) {
+          A = History[i];
+          B = History[i + 1];
+          break;
+        }
+      }
 
-    ctx.fillStyle = "red";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
-    ctx.fill();
-  }
+      const Span = Math.max(1, B.t - A.t);
+      const Alpha = Math.min(1, Math.max(0, (RenderTime - A.t) / Span));
 
-  requestAnimationFrame(loop);
-}
+      return {
+        x: A.x + (B.x - A.x) * Alpha,
+        y: A.y + (B.y - A.y) * Alpha,
+        score: B.score,
+        isDead: B.isDead,
+        name: B.name
+      };
+    }
 
-requestAnimationFrame(loop);
+    let Last = performance.now();
+    let NetworkTimer = 0;
 
-</script>
+    function Loop(T) {
+      const Dt = Math.min(0.033, (T - Last) / 1000);
+      Last = T;
+
+      ctx.clearRect(0, 0, 400, 600);
+
+      if (!IsGameOver) {
+        Bird.v += Gravity * Dt;
+        Bird.y += Bird.v * Dt;
+
+        if (Bird.y > 585) {
+          Bird.y = 585;
+          IsGameOver = true;
+        }
+
+        if (Bird.y < 0) {
+          Bird.y = 0;
+          Bird.v = 0;
+        }
+
+        PipeTimer += Dt;
+        if (PipeTimer >= PipeSpawnRate) {
+          PipeTimer = 0;
+          PipeSequenceCounter++;
+
+          const UniqueSeed = CurrentBlockTime + PipeSequenceCounter;
+          const RandomValue = SeededRandom(UniqueSeed);
+
+          const MinHeight = 60;
+          const MaxHeight = 360;
+          const TopHeight = Math.floor(RandomValue * (MaxHeight - MinHeight)) + MinHeight;
+
+          Pipes.push({
+            x: 400,
+            top: TopHeight,
+            bottom: TopHeight + PipeGap,
+            passed: false
+          });
+        }
+
+        for (let i = Pipes.length - 1; i >= 0; i--) {
+          const P = Pipes[i];
+          P.x -= PipeSpeed * Dt;
+
+          if (P.x < -60) {
+            Pipes.splice(i, 1);
+            continue;
+          }
+
+          if (!P.passed && P.x + 25 < Bird.x) {
+            P.passed = true;
+            Score++;
+            scoreElement.innerText = Score;
+          }
+
+          if (Bird.x + Bird.radius > P.x && Bird.x - Bird.radius < P.x + 50) {
+            if (Bird.y - Bird.radius < P.top || Bird.y + Bird.radius > P.bottom) {
+              IsGameOver = true;
+            }
+          }
+        }
+      }
+
+      NetworkTimer += Dt;
+      if (NetworkTimer > 0.05) {
+        NetworkTimer = 0;
+        EmitNetworkUpdate();
+      }
+
+      for (const P of Pipes) {
+        ctx.fillStyle = "#73bf2e";
+        ctx.fillRect(P.x, 0, 50, P.top);
+        ctx.strokeStyle = "#538122";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(P.x, -5, 50, P.top + 5);
+        ctx.fillRect(P.x, P.bottom, 50, 600 - P.bottom);
+        ctx.strokeRect(P.x, P.bottom, 50, 600 - P.bottom + 5);
+      }
+
+      ctx.beginPath();
+      ctx.arc(Bird.x, Bird.y, Bird.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#f5d323";
+      ctx.fill();
+      ctx.strokeStyle = "#d4b200";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#ff9a00";
+      ctx.ellipse(Bird.x + 10, Bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(Bird.x + 4, Bird.y - 4, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "black";
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.font = "bold 12px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(nameInput.value || "Duck", Bird.x, Bird.y - 20);
+
+      const RenderTime = Date.now() - SnapshotDelay;
+
+      for (const Id in RemoteBuffer) {
+        if (Id === socket.id) continue;
+
+        const History = RemoteBuffer[Id];
+        if (!History || History.length === 0) continue;
+
+        const Latest = History[History.length - 1];
+        if (Date.now() - Latest.t > DeadTimeout) continue;
+        if (Latest.isDead) continue;
+
+        const Remote = GetInterpolatedRemotePlayer(History, RenderTime);
+        if (!Remote) continue;
+
+        if (Remote.x < -OffscreenPad || Remote.x > canvas.width + OffscreenPad) continue;
+
+        ctx.beginPath();
+        ctx.arc(Remote.x, Remote.y, Bird.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = "#ff9a00";
+        ctx.ellipse(Remote.x + 10, Remote.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.font = "bold 11px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`${Remote.name || "Duck"} (${Remote.score || 0})`, Remote.x, Remote.y - 20);
+      }
+
+      if (IsGameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, 400, 600);
+        ctx.fillStyle = "white";
+        ctx.font = "bold 30px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", 200, 260);
+        ctx.font = "16px Arial";
+        ctx.fillText("Press Space or Tap Screen to Restart", 200, 310);
+      }
+
+      requestAnimationFrame(Loop);
+    }
+
+    requestAnimationFrame(Loop);
+  </script>
 </body>
 </html>
