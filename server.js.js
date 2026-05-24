@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path'); 
+const fs = require('fs'); // Added to check folder structures dynamically
 
 const app = express();
 const server = http.createServer(app);
@@ -10,6 +12,43 @@ const io = new Server(server, {
   cors: {
     origin: "*", 
     methods: ["GET", "POST"]
+  }
+});
+
+// FIXED PATH LOGIC: Systematically checks the root directory, sub-directories, and sub-folders to find your index.html file
+app.get('/', (req, res) => {
+  let rootPath = path.join(__dirname, 'index.html');
+  let publicPath = path.join(__dirname, 'public', 'index.html');
+  let srcPath = path.join(__dirname, 'src', 'index.html');
+
+  if (fs.existsSync(rootPath)) {
+    res.sendFile(rootPath);
+  } else if (fs.existsSync(publicPath)) {
+    res.sendFile(publicPath);
+  } else if (fs.existsSync(srcPath)) {
+    res.sendFile(srcPath);
+  } else {
+    // Fallback: search the entire deployment container for any instance of index.html
+    const findFile = (dir) => {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory() && !file.includes('node_modules')) {
+          const found = findFile(fullPath);
+          if (found) return found;
+        } else if (file === 'index.html') {
+          return fullPath;
+        }
+      }
+      return null;
+    };
+    
+    const dynamicPath = findFile(__dirname);
+    if (dynamicPath) {
+      res.sendFile(dynamicPath);
+    } else {
+      res.status(404).send("Error: index.html file could not be found anywhere inside your repository files.");
+    }
   }
 });
 
@@ -28,9 +67,7 @@ io.on('connection', (socket) => {
       score: 0,
       isDead: false
     };
-    // Sync current player list to the new player
     socket.emit('current-players', players);
-    // Tell everyone else a new player joined
     socket.broadcast.emit('player-joined', players[socket.id]);
   });
 
@@ -41,8 +78,6 @@ io.on('connection', (socket) => {
       players[socket.id].y = data.y;
       players[socket.id].score = data.score;
       players[socket.id].isDead = data.isDead;
-      
-      // Broadcast movement to all other connected clients
       socket.broadcast.emit('player-moved', players[socket.id]);
     }
   });
@@ -55,8 +90,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Use environment port for production hosting, fallback to 3000 for local testing
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+// Binds to 0.0.0.0 and forces port resolution to match Railway's internal proxy settings
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Socket.io server running on port ${PORT}`);
 });
