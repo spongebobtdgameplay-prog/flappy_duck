@@ -16,6 +16,7 @@
       justify-content: center;
       height: 100vh;
     }
+
     #ui {
       margin-bottom: 10px;
       color: white;
@@ -24,6 +25,7 @@
       text-shadow: 1px 1px 2px black;
       user-select: none;
     }
+
     #name {
       padding: 5px;
       border-radius: 4px;
@@ -31,6 +33,7 @@
       outline: none;
       font-weight: bold;
     }
+
     canvas {
       display: block;
       background: #70c5ce;
@@ -55,32 +58,60 @@
     const scoreElement = document.getElementById("scoreVal");
     const nameInput = document.getElementById("name");
 
+    const CanvasWidth = 400;
+    const CanvasHeight = 600;
+
+    const Gravity = 750;
+    const Jump = -240;
+    const ForwardSpeed = 120;
+    const BirdRadius = 14;
+
+    const PipeGap = 150;
+    const PipeWidth = 52;
+    const PipeSpawnDistance = 220;
+    const PipeMinTop = 70;
+    const PipeMaxTop = 360;
+
+    const SnapshotDelay = 100;
+    const MaxHistory = 12;
+    const DeadTimeout = 5000;
+    const OffscreenPad = 80;
+
     let Players = {};
     let RemoteBuffer = {};
     let IsGameOver = false;
     let Score = 0;
 
-    let Bird = { x: 100, y: 200, v: 0, radius: 14 };
-    const Gravity = 750;
-    const Jump = -240;
+    let Bird = {
+      worldX: 120,
+      y: 240,
+      vy: 0,
+      radius: BirdRadius
+    };
 
+    let CameraX = 0;
     let Pipes = [];
-    let PipeTimer = 0;
-    const PipeSpawnRate = 1.8;
-    const PipeSpeed = 140;
-    const PipeGap = 140;
-
+    let NextPipeX = 420;
     let CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
     let PipeSequenceCounter = 0;
-
-    const SnapshotDelay = 100;
-    const MaxHistory = 12;
-    const OffscreenPad = 50;
-    const DeadTimeout = 5000;
+    let Last = performance.now();
+    let NetworkTimer = 0;
 
     function SeededRandom(Seed) {
-      let X = Math.sin(Seed++) * 10000;
+      let X = Math.sin(Seed) * 10000;
       return X - Math.floor(X);
+    }
+
+    function CreatePipePair(PipeX, Seed) {
+      const RandomValue = SeededRandom(Seed);
+      const TopHeight = Math.floor(RandomValue * (PipeMaxTop - PipeMinTop)) + PipeMinTop;
+
+      return {
+        x: PipeX,
+        top: TopHeight,
+        bottom: TopHeight + PipeGap,
+        passed: false
+      };
     }
 
     function PushSnapshot(Id, Data) {
@@ -107,7 +138,7 @@
 
       socket.emit("join-game", {
         name: nameInput.value || "Duck",
-        x: Bird.x,
+        x: Bird.worldX,
         y: Bird.y,
         score: Score,
         isDead: IsGameOver
@@ -154,7 +185,7 @@
       if (!socket.connected) return;
 
       socket.emit("update-position", {
-        x: Bird.x,
+        x: Bird.worldX,
         y: Bird.y,
         score: Score,
         isDead: IsGameOver,
@@ -162,38 +193,18 @@
       });
     }
 
-    nameInput.addEventListener("input", () => {
-      SendJoin();
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (IsGameOver) {
-          ResetGame();
-        } else {
-          Bird.v = Jump;
-        }
-      }
-    });
-
-    canvas.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      if (IsGameOver) {
-        ResetGame();
-      } else {
-        Bird.v = Jump;
-      }
-    });
-
     function ResetGame() {
-      Bird.y = 200;
-      Bird.v = 0;
+      Bird.worldX = 120;
+      Bird.y = 240;
+      Bird.vy = 0;
       IsGameOver = false;
       Score = 0;
       scoreElement.innerText = Score;
       CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
       PipeSequenceCounter = 0;
+      Pipes = [];
+      NextPipeX = 420;
+      CameraX = 0;
       SendJoin();
       EmitNetworkUpdate();
     }
@@ -228,18 +239,49 @@
       };
     }
 
-    let Last = performance.now();
-    let NetworkTimer = 0;
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (IsGameOver) {
+          ResetGame();
+        } else {
+          Bird.vy = Jump;
+        }
+      }
+    });
+
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (IsGameOver) {
+        ResetGame();
+      } else {
+        Bird.vy = Jump;
+      }
+    }, { passive: false });
+
+    nameInput.addEventListener("input", () => {
+      SendJoin();
+    });
+
+    function EnsurePipesAhead() {
+      while (Pipes.length === 0 || Pipes[Pipes.length - 1].x < Bird.worldX + 1200) {
+        PipeSequenceCounter++;
+        const Seed = CurrentBlockTime + PipeSequenceCounter;
+        Pipes.push(CreatePipePair(NextPipeX, Seed));
+        NextPipeX += PipeSpawnDistance;
+      }
+    }
 
     function Loop(T) {
       const Dt = Math.min(0.033, (T - Last) / 1000);
       Last = T;
 
-      ctx.clearRect(0, 0, 400, 600);
+      ctx.clearRect(0, 0, CanvasWidth, CanvasHeight);
 
       if (!IsGameOver) {
-        Bird.v += Gravity * Dt;
-        Bird.y += Bird.v * Dt;
+        Bird.worldX += ForwardSpeed * Dt;
+        Bird.vy += Gravity * Dt;
+        Bird.y += Bird.vy * Dt;
 
         if (Bird.y > 585) {
           Bird.y = 585;
@@ -248,51 +290,41 @@
 
         if (Bird.y < 0) {
           Bird.y = 0;
-          Bird.v = 0;
+          Bird.vy = 0;
         }
 
-        PipeTimer += Dt;
-        if (PipeTimer >= PipeSpawnRate) {
-          PipeTimer = 0;
-          PipeSequenceCounter++;
-
-          const UniqueSeed = CurrentBlockTime + PipeSequenceCounter;
-          const RandomValue = SeededRandom(UniqueSeed);
-
-          const MinHeight = 60;
-          const MaxHeight = 360;
-          const TopHeight = Math.floor(RandomValue * (MaxHeight - MinHeight)) + MinHeight;
-
-          Pipes.push({
-            x: 400,
-            top: TopHeight,
-            bottom: TopHeight + PipeGap,
-            passed: false
-          });
-        }
+        EnsurePipesAhead();
 
         for (let i = Pipes.length - 1; i >= 0; i--) {
           const P = Pipes[i];
-          P.x -= PipeSpeed * Dt;
 
-          if (P.x < -60) {
-            Pipes.splice(i, 1);
-            continue;
-          }
-
-          if (!P.passed && P.x + 25 < Bird.x) {
+          if (!P.passed && Bird.worldX > P.x + PipeWidth) {
             P.passed = true;
             Score++;
             scoreElement.innerText = Score;
           }
 
-          if (Bird.x + Bird.radius > P.x && Bird.x - Bird.radius < P.x + 50) {
-            if (Bird.y - Bird.radius < P.top || Bird.y + Bird.radius > P.bottom) {
+          const BirdLeft = Bird.worldX - BirdRadius;
+          const BirdRight = Bird.worldX + BirdRadius;
+          const BirdTop = Bird.y - BirdRadius;
+          const BirdBottom = Bird.y + BirdRadius;
+
+          const PipeLeft = P.x;
+          const PipeRight = P.x + PipeWidth;
+
+          if (BirdRight > PipeLeft && BirdLeft < PipeRight) {
+            if (BirdTop < P.top || BirdBottom > P.bottom) {
               IsGameOver = true;
             }
           }
+
+          if (P.x + PipeWidth < Bird.worldX - 500) {
+            Pipes.splice(i, 1);
+          }
         }
       }
+
+      CameraX = Math.max(0, Bird.worldX - 120);
 
       NetworkTimer += Dt;
       if (NetworkTimer > 0.05) {
@@ -301,17 +333,24 @@
       }
 
       for (const P of Pipes) {
+        const ScreenX = Math.floor(P.x - CameraX);
+
+        if (ScreenX < -100 || ScreenX > CanvasWidth + 100) continue;
+
         ctx.fillStyle = "#73bf2e";
-        ctx.fillRect(P.x, 0, 50, P.top);
+        ctx.fillRect(ScreenX, 0, PipeWidth, P.top);
         ctx.strokeStyle = "#538122";
         ctx.lineWidth = 3;
-        ctx.strokeRect(P.x, -5, 50, P.top + 5);
-        ctx.fillRect(P.x, P.bottom, 50, 600 - P.bottom);
-        ctx.strokeRect(P.x, P.bottom, 50, 600 - P.bottom + 5);
+        ctx.strokeRect(ScreenX, -5, PipeWidth, P.top + 5);
+
+        ctx.fillRect(ScreenX, P.bottom, PipeWidth, CanvasHeight - P.bottom);
+        ctx.strokeRect(ScreenX, P.bottom, PipeWidth, CanvasHeight - P.bottom + 5);
       }
 
+      const BirdScreenX = Bird.worldX - CameraX;
+
       ctx.beginPath();
-      ctx.arc(Bird.x, Bird.y, Bird.radius, 0, Math.PI * 2);
+      ctx.arc(BirdScreenX, Bird.y, BirdRadius, 0, Math.PI * 2);
       ctx.fillStyle = "#f5d323";
       ctx.fill();
       ctx.strokeStyle = "#d4b200";
@@ -320,19 +359,19 @@
 
       ctx.beginPath();
       ctx.fillStyle = "#ff9a00";
-      ctx.ellipse(Bird.x + 10, Bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(BirdScreenX + 10, Bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(Bird.x + 4, Bird.y - 4, 2, 0, Math.PI * 2);
+      ctx.arc(BirdScreenX + 4, Bird.y - 4, 2, 0, Math.PI * 2);
       ctx.fillStyle = "black";
       ctx.fill();
 
       ctx.fillStyle = "black";
       ctx.font = "bold 12px Arial";
       ctx.textAlign = "center";
-      ctx.fillText(nameInput.value || "Duck", Bird.x, Bird.y - 20);
+      ctx.fillText(nameInput.value || "Duck", BirdScreenX, Bird.y - 20);
 
       const RenderTime = Date.now() - SnapshotDelay;
 
@@ -349,10 +388,12 @@
         const Remote = GetInterpolatedRemotePlayer(History, RenderTime);
         if (!Remote) continue;
 
-        if (Remote.x < -OffscreenPad || Remote.x > canvas.width + OffscreenPad) continue;
+        const RemoteScreenX = Remote.x - CameraX;
+
+        if (RemoteScreenX < -OffscreenPad || RemoteScreenX > canvas.width + OffscreenPad) continue;
 
         ctx.beginPath();
-        ctx.arc(Remote.x, Remote.y, Bird.radius, 0, Math.PI * 2);
+        ctx.arc(RemoteScreenX, Remote.y, BirdRadius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
         ctx.fill();
         ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
@@ -361,19 +402,19 @@
 
         ctx.beginPath();
         ctx.fillStyle = "#ff9a00";
-        ctx.ellipse(Remote.x + 10, Remote.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(RemoteScreenX + 10, Remote.y + 2, 8, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
         ctx.font = "bold 11px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(`${Remote.name || "Duck"} (${Remote.score || 0})`, Remote.x, Remote.y - 20);
+        ctx.fillText(`${Remote.name || "Duck"} (${Remote.score || 0})`, RemoteScreenX, Remote.y - 20);
       }
 
       if (IsGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx.fillRect(0, 0, 400, 600);
+        ctx.fillRect(0, 0, CanvasWidth, CanvasHeight);
         ctx.fillStyle = "white";
         ctx.font = "bold 30px Arial";
         ctx.textAlign = "center";
@@ -385,6 +426,7 @@
       requestAnimationFrame(Loop);
     }
 
+    EnsurePipesAhead();
     requestAnimationFrame(Loop);
   </script>
 </body>
