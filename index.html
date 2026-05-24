@@ -1,433 +1,615 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>True Multiplayer Flappy Duck</title>
-  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-  <style>
-    body {
-      margin: 0;
-      background: #4ec0ca;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Duck</title>
 
-    #ui {
-      margin-bottom: 10px;
-      color: white;
-      font-size: 16px;
-      font-weight: bold;
-      text-shadow: 1px 1px 2px black;
-      user-select: none;
-    }
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,Helvetica,sans-serif;
+}
 
-    #name {
-      padding: 5px;
-      border-radius: 4px;
-      border: none;
-      outline: none;
-      font-weight: bold;
-    }
+body{
+    background:#0f172a;
+    color:white;
+    overflow:hidden;
+}
 
-    canvas {
-      display: block;
-      background: #70c5ce;
-      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-      border-radius: 4px;
-    }
-  </style>
+#gameCanvas{
+    position:fixed;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    background:linear-gradient(to bottom,#0ea5e9,#1e293b);
+}
+
+#mainMenu{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    width:420px;
+    background:rgba(15,23,42,.96);
+    border:2px solid #38bdf8;
+    border-radius:20px;
+    padding:24px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    box-shadow:0 0 40px rgba(56,189,248,.4);
+}
+
+.title{
+    font-size:42px;
+    font-weight:900;
+    text-align:center;
+    color:#38bdf8;
+    text-shadow:0 0 20px #38bdf8;
+}
+
+button{
+    border:none;
+    border-radius:14px;
+    padding:16px;
+    font-size:18px;
+    font-weight:700;
+    cursor:pointer;
+    transition:.15s;
+    background:#1e293b;
+    color:white;
+}
+
+button:hover{
+    transform:scale(1.03);
+    background:#334155;
+}
+
+.primary{
+    background:#0ea5e9;
+}
+
+.primary:hover{
+    background:#38bdf8;
+}
+
+.panel{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    width:520px;
+    max-height:80vh;
+    overflow-y:auto;
+    background:#111827;
+    border:2px solid #38bdf8;
+    border-radius:18px;
+    padding:20px;
+    display:none;
+    flex-direction:column;
+    gap:12px;
+}
+
+.panel h2{
+    text-align:center;
+    color:#38bdf8;
+}
+
+.closeButton{
+    background:#ef4444;
+}
+
+input,textarea,select{
+    width:100%;
+    padding:14px;
+    border-radius:12px;
+    border:none;
+    background:#1e293b;
+    color:white;
+    font-size:16px;
+}
+
+textarea{
+    min-height:120px;
+    resize:none;
+}
+
+.card{
+    background:#1e293b;
+    border-radius:14px;
+    padding:14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.small{
+    opacity:.7;
+    font-size:13px;
+}
+
+.voteRow{
+    display:flex;
+    gap:10px;
+}
+
+.topBar{
+    position:absolute;
+    top:10px;
+    left:10px;
+    right:10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    z-index:100;
+}
+
+.stats{
+    background:rgba(15,23,42,.9);
+    padding:12px 18px;
+    border-radius:14px;
+    border:1px solid #38bdf8;
+    display:flex;
+    gap:18px;
+    font-weight:700;
+}
+
+.settingsButton{
+    width:60px;
+    height:60px;
+    border-radius:50%;
+    font-size:28px;
+}
+
+.hidden{
+    display:none;
+}
+</style>
 </head>
+
 <body>
-  <div id="ui">
-    Name: <input id="name" value="Duck" maxlength="10">
-    <span style="margin-left: 20px;">Score: <span id="scoreVal">0</span></span>
-  </div>
 
-  <canvas id="game" width="400" height="600"></canvas>
+<canvas id="gameCanvas"></canvas>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io(window.location.origin);
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const scoreElement = document.getElementById("scoreVal");
-    const nameInput = document.getElementById("name");
+<div class="topBar">
+    <div class="stats">
+        <div>Score: <span id="scoreText">0</span></div>
+        <div>Best: <span id="bestText">0</span></div>
+        <div>Coins: <span id="coinsText">0</span></div>
+    </div>
 
-    const CanvasWidth = 400;
-    const CanvasHeight = 600;
+    <button class="settingsButton" onclick="openPanel('settingsPanel')">
+        ⚙
+    </button>
+</div>
 
-    const Gravity = 750;
-    const Jump = -240;
-    const ForwardSpeed = 120;
-    const BirdRadius = 14;
+<div id="mainMenu">
+    <div class="title">FLAPPY DUCK</div>
 
-    const PipeGap = 150;
-    const PipeWidth = 52;
-    const PipeSpawnDistance = 220;
-    const PipeMinTop = 70;
-    const PipeMaxTop = 360;
+    <button class="primary" onclick="startGame()">
+        PLAY
+    </button>
 
-    const SnapshotDelay = 100;
-    const MaxHistory = 12;
-    const DeadTimeout = 5000;
-    const OffscreenPad = 80;
+    <button onclick="openPanel('leaderboardPanel')">
+        LEADERBOARDS
+    </button>
 
-    let Players = {};
-    let RemoteBuffer = {};
-    let IsGameOver = false;
-    let Score = 0;
+    <button onclick="openPanel('suggestionPanel')">
+        SUGGESTIONS
+    </button>
 
-    let Bird = {
-      worldX: 120,
-      y: 240,
-      vy: 0,
-      radius: BirdRadius
-    };
+    <button onclick="openPanel('reportPanel')">
+        REPORTS
+    </button>
 
-    let CameraX = 0;
-    let Pipes = [];
-    let NextPipeX = 420;
-    let CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
-    let PipeSequenceCounter = 0;
-    let Last = performance.now();
-    let NetworkTimer = 0;
+    <button onclick="openPanel('teamPanel')">
+        TEAMS
+    </button>
+</div>
 
-    function SeededRandom(Seed) {
-      let X = Math.sin(Seed) * 10000;
-      return X - Math.floor(X);
+<div id="settingsPanel" class="panel">
+    <h2>SETTINGS</h2>
+
+    <input id="usernameInput" placeholder="Username">
+
+    <input id="passwordInput" type="password" placeholder="Password">
+
+    <button onclick="login()">
+        LOGIN
+    </button>
+
+    <button onclick="createAccount()">
+        CREATE ACCOUNT
+    </button>
+
+    <button onclick="logout()">
+        LOGOUT
+    </button>
+
+    <button class="closeButton" onclick="closePanels()">
+        CLOSE
+    </button>
+</div>
+
+<div id="leaderboardPanel" class="panel">
+    <h2>LEADERBOARDS</h2>
+
+    <div id="leaderboardList"></div>
+
+    <button class="closeButton" onclick="closePanels()">
+        CLOSE
+    </button>
+</div>
+
+<div id="reportPanel" class="panel">
+    <h2>REPORT PLAYER</h2>
+
+    <select id="reportCategory">
+        <option>Hacker</option>
+        <option>Bug</option>
+        <option>Cheat</option>
+        <option>Other</option>
+    </select>
+
+    <input id="reportTitle" placeholder="Title">
+
+    <textarea id="reportDetails" placeholder="Details"></textarea>
+
+    <button onclick="submitReport()">
+        SUBMIT REPORT
+    </button>
+
+    <div id="reportList"></div>
+
+    <button class="closeButton" onclick="closePanels()">
+        CLOSE
+    </button>
+</div>
+
+<div id="suggestionPanel" class="panel">
+    <h2>SUGGESTIONS</h2>
+
+    <select id="suggestionCategory">
+        <option>Gameplay</option>
+        <option>Shop</option>
+        <option>Teams</option>
+        <option>UI</option>
+        <option>Multiplayer</option>
+        <option>Other</option>
+    </select>
+
+    <input id="suggestionTitle" placeholder="Title">
+
+    <textarea id="suggestionDetails" placeholder="Suggestion"></textarea>
+
+    <button onclick="submitSuggestion()">
+        SUBMIT SUGGESTION
+    </button>
+
+    <div id="suggestionList"></div>
+
+    <button class="closeButton" onclick="closePanels()">
+        CLOSE
+    </button>
+</div>
+
+<div id="teamPanel" class="panel">
+    <h2>TEAMS</h2>
+
+    <input id="teamName" placeholder="Team Name">
+
+    <button onclick="createTeam()">
+        CREATE TEAM
+    </button>
+
+    <div id="teamList"></div>
+
+    <button class="closeButton" onclick="closePanels()">
+        CLOSE
+    </button>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas")
+const ctx = canvas.getContext("2d")
+
+canvas.width = window.innerWidth
+canvas.height = window.innerHeight
+
+let birdY = 300
+let velocity = 0
+let gravity = 0.55
+let flapPower = -9
+let score = 0
+let best = Number(localStorage.getItem("bestScore") || 0)
+let coins = Number(localStorage.getItem("coins") || 0)
+let pipes = []
+let playing = false
+
+document.getElementById("bestText").textContent = best
+document.getElementById("coinsText").textContent = coins
+
+function resetGame(){
+    birdY = 300
+    velocity = 0
+    score = 0
+    pipes = []
+}
+
+function startGame(){
+    resetGame()
+    playing = true
+    document.getElementById("mainMenu").style.display = "none"
+}
+
+function flap(){
+    if(!playing) return
+    velocity = flapPower
+}
+
+window.addEventListener("keydown",e=>{
+    if(e.code === "Space"){
+        flap()
     }
+})
 
-    function CreatePipePair(PipeX, Seed) {
-      const RandomValue = SeededRandom(Seed);
-      const TopHeight = Math.floor(RandomValue * (PipeMaxTop - PipeMinTop)) + PipeMinTop;
+window.addEventListener("mousedown",()=>{
+    flap()
+})
 
-      return {
-        x: PipeX,
-        top: TopHeight,
-        bottom: TopHeight + PipeGap,
-        passed: false
-      };
+function spawnPipe(){
+    const gap = 220
+    const topHeight = Math.random() * 350 + 60
+
+    pipes.push({
+        x: canvas.width,
+        top: topHeight,
+        bottom: topHeight + gap,
+        scored:false
+    })
+}
+
+setInterval(()=>{
+    if(playing){
+        spawnPipe()
     }
+},1800)
 
-    function PushSnapshot(Id, Data) {
-      if (!RemoteBuffer[Id]) {
-        RemoteBuffer[Id] = [];
-      }
+function update(){
+    requestAnimationFrame(update)
 
-      RemoteBuffer[Id].push({
-        x: Data.x,
-        y: Data.y,
-        score: Data.score || 0,
-        isDead: !!Data.isDead,
-        name: Data.name || "Duck",
-        t: Date.now()
-      });
+    ctx.clearRect(0,0,canvas.width,canvas.height)
 
-      while (RemoteBuffer[Id].length > MaxHistory) {
-        RemoteBuffer[Id].shift();
-      }
-    }
+    if(playing){
+        velocity += gravity
+        birdY += velocity
 
-    function SendJoin() {
-      if (!socket.connected) return;
+        ctx.fillStyle = "#facc15"
+        ctx.beginPath()
+        ctx.arc(180,birdY,24,0,Math.PI*2)
+        ctx.fill()
 
-      socket.emit("join-game", {
-        name: nameInput.value || "Duck",
-        x: Bird.worldX,
-        y: Bird.y,
-        score: Score,
-        isDead: IsGameOver
-      });
-    }
+        for(let i = pipes.length - 1; i >= 0; i--){
+            const pipe = pipes[i]
+            pipe.x -= 5
 
-    socket.on("connect", () => {
-      SendJoin();
-    });
+            ctx.fillStyle = "#22c55e"
+            ctx.fillRect(pipe.x,0,90,pipe.top)
 
-    socket.on("current-players", (ServerPlayers) => {
-      Players = ServerPlayers || {};
-      RemoteBuffer = {};
+            ctx.fillRect(
+                pipe.x,
+                pipe.bottom,
+                90,
+                canvas.height - pipe.bottom
+            )
 
-      const Now = Date.now();
-      for (const Id in ServerPlayers) {
-        RemoteBuffer[Id] = [{
-          x: ServerPlayers[Id].x,
-          y: ServerPlayers[Id].y,
-          score: ServerPlayers[Id].score || 0,
-          isDead: !!ServerPlayers[Id].isDead,
-          name: ServerPlayers[Id].name || "Duck",
-          t: Now
-        }];
-      }
-    });
-
-    socket.on("player-joined", (Player) => {
-      Players[Player.id] = Player;
-      PushSnapshot(Player.id, Player);
-    });
-
-    socket.on("player-state", (Player) => {
-      Players[Player.id] = Player;
-      PushSnapshot(Player.id, Player);
-    });
-
-    socket.on("player-disconnected", (Id) => {
-      delete Players[Id];
-      delete RemoteBuffer[Id];
-    });
-
-    function EmitNetworkUpdate() {
-      if (!socket.connected) return;
-
-      socket.emit("update-position", {
-        x: Bird.worldX,
-        y: Bird.y,
-        score: Score,
-        isDead: IsGameOver,
-        name: nameInput.value || "Duck"
-      });
-    }
-
-    function ResetGame() {
-      Bird.worldX = 120;
-      Bird.y = 240;
-      Bird.vy = 0;
-      IsGameOver = false;
-      Score = 0;
-      scoreElement.innerText = Score;
-      CurrentBlockTime = Math.floor(Date.now() / 60000) * 60;
-      PipeSequenceCounter = 0;
-      Pipes = [];
-      NextPipeX = 420;
-      CameraX = 0;
-      SendJoin();
-      EmitNetworkUpdate();
-    }
-
-    function GetInterpolatedRemotePlayer(History, RenderTime) {
-      if (!History || History.length === 0) return null;
-      if (History.length === 1) return History[0];
-
-      if (RenderTime <= History[0].t) return History[0];
-      if (RenderTime >= History[History.length - 1].t) return History[History.length - 1];
-
-      let A = History[0];
-      let B = History[1];
-
-      for (let i = 0; i < History.length - 1; i++) {
-        if (History[i].t <= RenderTime && History[i + 1].t >= RenderTime) {
-          A = History[i];
-          B = History[i + 1];
-          break;
-        }
-      }
-
-      const Span = Math.max(1, B.t - A.t);
-      const Alpha = Math.min(1, Math.max(0, (RenderTime - A.t) / Span));
-
-      return {
-        x: A.x + (B.x - A.x) * Alpha,
-        y: A.y + (B.y - A.y) * Alpha,
-        score: B.score,
-        isDead: B.isDead,
-        name: B.name
-      };
-    }
-
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (IsGameOver) {
-          ResetGame();
-        } else {
-          Bird.vy = Jump;
-        }
-      }
-    });
-
-    canvas.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      if (IsGameOver) {
-        ResetGame();
-      } else {
-        Bird.vy = Jump;
-      }
-    }, { passive: false });
-
-    nameInput.addEventListener("input", () => {
-      SendJoin();
-    });
-
-    function EnsurePipesAhead() {
-      while (Pipes.length === 0 || Pipes[Pipes.length - 1].x < Bird.worldX + 1200) {
-        PipeSequenceCounter++;
-        const Seed = CurrentBlockTime + PipeSequenceCounter;
-        Pipes.push(CreatePipePair(NextPipeX, Seed));
-        NextPipeX += PipeSpawnDistance;
-      }
-    }
-
-    function Loop(T) {
-      const Dt = Math.min(0.033, (T - Last) / 1000);
-      Last = T;
-
-      ctx.clearRect(0, 0, CanvasWidth, CanvasHeight);
-
-      if (!IsGameOver) {
-        Bird.worldX += ForwardSpeed * Dt;
-        Bird.vy += Gravity * Dt;
-        Bird.y += Bird.vy * Dt;
-
-        if (Bird.y > 585) {
-          Bird.y = 585;
-          IsGameOver = true;
-        }
-
-        if (Bird.y < 0) {
-          Bird.y = 0;
-          Bird.vy = 0;
-        }
-
-        EnsurePipesAhead();
-
-        for (let i = Pipes.length - 1; i >= 0; i--) {
-          const P = Pipes[i];
-
-          if (!P.passed && Bird.worldX > P.x + PipeWidth) {
-            P.passed = true;
-            Score++;
-            scoreElement.innerText = Score;
-          }
-
-          const BirdLeft = Bird.worldX - BirdRadius;
-          const BirdRight = Bird.worldX + BirdRadius;
-          const BirdTop = Bird.y - BirdRadius;
-          const BirdBottom = Bird.y + BirdRadius;
-
-          const PipeLeft = P.x;
-          const PipeRight = P.x + PipeWidth;
-
-          if (BirdRight > PipeLeft && BirdLeft < PipeRight) {
-            if (BirdTop < P.top || BirdBottom > P.bottom) {
-              IsGameOver = true;
+            if(
+                180 + 24 > pipe.x &&
+                180 - 24 < pipe.x + 90 &&
+                (
+                    birdY - 24 < pipe.top ||
+                    birdY + 24 > pipe.bottom
+                )
+            ){
+                endGame()
             }
-          }
 
-          if (P.x + PipeWidth < Bird.worldX - 500) {
-            Pipes.splice(i, 1);
-          }
+            if(pipe.x + 90 < 180 && !pipe.scored){
+                pipe.scored = true
+                score++
+                coins++
+
+                document.getElementById("scoreText").textContent = score
+                document.getElementById("coinsText").textContent = coins
+
+                localStorage.setItem("coins",coins)
+            }
+
+            if(pipe.x < -100){
+                pipes.splice(i,1)
+            }
         }
-      }
 
-      CameraX = Math.max(0, Bird.worldX - 120);
+        if(birdY > canvas.height || birdY < -40){
+            endGame()
+        }
+    }
+}
 
-      NetworkTimer += Dt;
-      if (NetworkTimer > 0.05) {
-        NetworkTimer = 0;
-        EmitNetworkUpdate();
-      }
+function endGame(){
+    playing = false
 
-      for (const P of Pipes) {
-        const ScreenX = Math.floor(P.x - CameraX);
-
-        if (ScreenX < -100 || ScreenX > CanvasWidth + 100) continue;
-
-        ctx.fillStyle = "#73bf2e";
-        ctx.fillRect(ScreenX, 0, PipeWidth, P.top);
-        ctx.strokeStyle = "#538122";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(ScreenX, -5, PipeWidth, P.top + 5);
-
-        ctx.fillRect(ScreenX, P.bottom, PipeWidth, CanvasHeight - P.bottom);
-        ctx.strokeRect(ScreenX, P.bottom, PipeWidth, CanvasHeight - P.bottom + 5);
-      }
-
-      const BirdScreenX = Bird.worldX - CameraX;
-
-      ctx.beginPath();
-      ctx.arc(BirdScreenX, Bird.y, BirdRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "#f5d323";
-      ctx.fill();
-      ctx.strokeStyle = "#d4b200";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.fillStyle = "#ff9a00";
-      ctx.ellipse(BirdScreenX + 10, Bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(BirdScreenX + 4, Bird.y - 4, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "black";
-      ctx.fill();
-
-      ctx.fillStyle = "black";
-      ctx.font = "bold 12px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(nameInput.value || "Duck", BirdScreenX, Bird.y - 20);
-
-      const RenderTime = Date.now() - SnapshotDelay;
-
-      for (const Id in RemoteBuffer) {
-        if (Id === socket.id) continue;
-
-        const History = RemoteBuffer[Id];
-        if (!History || History.length === 0) continue;
-
-        const Latest = History[History.length - 1];
-        if (Date.now() - Latest.t > DeadTimeout) continue;
-        if (Latest.isDead) continue;
-
-        const Remote = GetInterpolatedRemotePlayer(History, RenderTime);
-        if (!Remote) continue;
-
-        const RemoteScreenX = Remote.x - CameraX;
-
-        if (RemoteScreenX < -OffscreenPad || RemoteScreenX > canvas.width + OffscreenPad) continue;
-
-        ctx.beginPath();
-        ctx.arc(RemoteScreenX, Remote.y, BirdRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.fillStyle = "#ff9a00";
-        ctx.ellipse(RemoteScreenX + 10, Remote.y + 2, 8, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-        ctx.font = "bold 11px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(`${Remote.name || "Duck"} (${Remote.score || 0})`, RemoteScreenX, Remote.y - 20);
-      }
-
-      if (IsGameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx.fillRect(0, 0, CanvasWidth, CanvasHeight);
-        ctx.fillStyle = "white";
-        ctx.font = "bold 30px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", 200, 260);
-        ctx.font = "16px Arial";
-        ctx.fillText("Press Space or Tap Screen to Restart", 200, 310);
-      }
-
-      requestAnimationFrame(Loop);
+    if(score > best){
+        best = score
+        localStorage.setItem("bestScore",best)
     }
 
-    EnsurePipesAhead();
-    requestAnimationFrame(Loop);
-  </script>
+    document.getElementById("bestText").textContent = best
+    document.getElementById("mainMenu").style.display = "flex"
+}
+
+update()
+
+function closePanels(){
+    document.querySelectorAll(".panel").forEach(panel=>{
+        panel.style.display = "none"
+    })
+}
+
+function openPanel(id){
+    closePanels()
+    document.getElementById(id).style.display = "flex"
+}
+
+async function createAccount(){
+    const username = document.getElementById("usernameInput").value
+    const password = document.getElementById("passwordInput").value
+
+    const result = await runServerFunction("createAccount",{
+        username,
+        password
+    })
+
+    alert(result.message || result.error)
+}
+
+async function login(){
+    const username = document.getElementById("usernameInput").value
+    const password = document.getElementById("passwordInput").value
+
+    const result = await runServerFunction("loginAccount",{
+        username,
+        password
+    })
+
+    alert(result.message || result.error)
+}
+
+async function logout(){
+    const result = await runServerFunction("logoutAccount")
+    alert(result.message || result.error)
+}
+
+async function submitSuggestion(){
+    const category = document.getElementById("suggestionCategory").value
+    const title = document.getElementById("suggestionTitle").value
+    const details = document.getElementById("suggestionDetails").value
+
+    const result = await runServerFunction("submitSuggestion",{
+        category,
+        title,
+        details
+    })
+
+    alert(result.message || result.error)
+
+    loadSuggestions()
+}
+
+async function loadSuggestions(){
+    const data = await runServerFunction("getSuggestionData")
+
+    const container = document.getElementById("suggestionList")
+    container.innerHTML = ""
+
+    ;(data.suggestions || []).forEach(item=>{
+        const div = document.createElement("div")
+        div.className = "card"
+
+        div.innerHTML = `
+            <h3>${item.title}</h3>
+            <div>${item.details}</div>
+            <div class="small">${item.category} • ${item.username}</div>
+            <div class="voteRow">
+                <button onclick="voteSuggestion('${item.id}','heart')">
+                    ❤️ ${item.hearts}
+                </button>
+
+                <button onclick="voteSuggestion('${item.id}','dislike')">
+                    👎 ${item.dislikes}
+                </button>
+            </div>
+        `
+
+        container.appendChild(div)
+    })
+}
+
+async function voteSuggestion(id,reaction){
+    await runServerFunction("voteSuggestion",{
+        suggestionId:id,
+        reaction
+    })
+
+    loadSuggestions()
+}
+
+async function submitReport(){
+    const category = document.getElementById("reportCategory").value
+    const title = document.getElementById("reportTitle").value
+    const details = document.getElementById("reportDetails").value
+
+    const result = await runServerFunction("submitReport",{
+        category,
+        title,
+        details
+    })
+
+    alert(result.message || result.error)
+}
+
+async function createTeam(){
+    const name = document.getElementById("teamName").value
+
+    const result = await runServerFunction("createTeam",{
+        name,
+        maxPlayers:5
+    })
+
+    alert(result.message || result.error)
+}
+
+async function refreshLeaderboards(){
+    const data = await runServerFunction("getLeaderboards")
+
+    const container = document.getElementById("leaderboardList")
+    container.innerHTML = ""
+
+    ;(data.highscores || []).forEach((row,index)=>{
+        const div = document.createElement("div")
+        div.className = "card"
+
+        div.innerHTML = `
+            <div>#${index + 1} ${row.username}</div>
+            <div>Best: ${row.best}</div>
+            <div>Coins: ${row.coins}</div>
+        `
+
+        container.appendChild(div)
+    })
+}
+
+function runServerFunction(name,data){
+    return new Promise(resolve=>{
+        if(typeof google !== "undefined"){
+            google.script.run
+                .withSuccessHandler(resolve)
+                [name](data)
+        }else{
+            resolve({
+                ok:true,
+                message:"Node server placeholder active."
+            })
+        }
+    })
+}
+
+loadSuggestions()
+refreshLeaderboards()
+</script>
+
 </body>
 </html>
