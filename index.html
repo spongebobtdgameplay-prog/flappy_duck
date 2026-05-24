@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Multiplayer Flappy Duck (Socket.io)</title>
+  <title>True Multiplayer Flappy Duck</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   <style>
     body {
@@ -52,9 +52,8 @@
   <script src="https://socket.io"></script>
 
   <script>
-    // Local development fallback connection address
-    const SERVER_URL = "http://localhost:3000"; 
-    
+    // FIXED: Points natively to your self-hosted Railway domain setup
+    const SERVER_URL = window.location.origin; 
     const socket = io(SERVER_URL);
 
     const canvas = document.getElementById("game");
@@ -75,8 +74,16 @@
     const pipeSpeed = 140;     
     const pipeGap = 140;       
 
-    let last = performance.now();
-    let networkTimer = 0;
+    // --- CLOCK-SYNCHRONIZED PIPE GENERATOR ---
+    // This anchors the obstacle timeline to the top of the current minute.
+    // Every player connected during this minute handles identical generation paths.
+    let currentBlockTime = Math.floor(Date.now() / 60000) * 60;
+    let pipeSequenceCounter = 0;
+
+    function seededRandom(seed) {
+      let x = Math.sin(seed++) * 10000;
+      return x - Math.floor(x);
+    }
 
     socket.on('connect', () => {
       socket.emit('join-game', {
@@ -130,8 +137,16 @@
       score = 0;
       scoreElement.innerText = score;
       isGameOver = false;
+      
+      // Sync timeline tracker back up to global time upon player death restart
+      currentBlockTime = Math.floor(Date.now() / 60000) * 60;
+      pipeSequenceCounter = 0;
+      
       emitNetworkUpdate();
     }
+
+    let last = performance.now();
+    let networkTimer = 0;
 
     function loop(t) {
       const dt = Math.min(0.033, (t - last) / 1000); 
@@ -149,9 +164,17 @@
         pipeTimer += dt;
         if (pipeTimer >= pipeSpawnRate) {
           pipeTimer = 0;
+          pipeSequenceCounter++;
+
+          // FIXED: Creates a shared procedural algorithm seed value based on clock time.
+          // This forces the vertical gaps to align identically for all live network connections.
+          let uniqueSeed = currentBlockTime + pipeSequenceCounter;
+          let pseudoRandomValue = seededRandom(uniqueSeed);
+
           let minHeight = 60;
           let maxHeight = 360;
-          let topHeight = Math.floor(Math.random() * (maxHeight - minHeight)) + minHeight;
+          let topHeight = Math.floor(pseudoRandomValue * (maxHeight - minHeight)) + minHeight;
+          
           pipes.push({
             x: 400,
             top: topHeight,
@@ -189,7 +212,7 @@
         emitNetworkUpdate();
       }
 
-      // Render Obstacle Gaps
+      // Render Synchronized Obstacles
       pipes.forEach(p => {
         ctx.fillStyle = "#73bf2e";
         ctx.fillRect(p.x, 0, 50, p.top);
@@ -201,7 +224,7 @@
         ctx.strokeRect(p.x, p.bottom, 50, 600 - p.bottom + 5);
       });
 
-      // Render Local Yellow Duck
+      // Render Local Yellow Duck Player
       ctx.beginPath();
       ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
       ctx.fillStyle = "#f5d323";
