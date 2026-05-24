@@ -1,97 +1,191 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path'); 
-const fs = require('fs'); // Added to check folder structures dynamically
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
 
-// Allow any frontend website origin to securely connect via WebSockets
 const io = new Server(server, {
   cors: {
-    origin: "*", 
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
 
-// FIXED PATH LOGIC: Systematically checks the root directory, sub-directories, and sub-folders to find your index.html file
-app.get('/', (req, res) => {
-  let rootPath = path.join(__dirname, 'index.html');
-  let publicPath = path.join(__dirname, 'public', 'index.html');
-  let srcPath = path.join(__dirname, 'src', 'index.html');
+function FindIndexHtml(StartDir) {
+  const SearchQueue = [StartDir];
 
-  if (fs.existsSync(rootPath)) {
-    res.sendFile(rootPath);
-  } else if (fs.existsSync(publicPath)) {
-    res.sendFile(publicPath);
-  } else if (fs.existsSync(srcPath)) {
-    res.sendFile(srcPath);
-  } else {
-    // Fallback: search the entire deployment container for any instance of index.html
-    const findFile = (dir) => {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        const fullPath = path.join(dir, file);
-        if (fs.statSync(fullPath).isDirectory() && !file.includes('node_modules')) {
-          const found = findFile(fullPath);
-          if (found) return found;
-        } else if (file === 'index.html') {
-          return fullPath;
-        }
+  while (SearchQueue.length > 0) {
+    const CurrentDir = SearchQueue.shift();
+
+    let Entries;
+    try {
+      Entries = fs.readdirSync(CurrentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const Entry of Entries) {
+      const FullPath = path.join(CurrentDir, Entry.name);
+
+      if (Entry.isFile() && Entry.name.toLowerCase() === "index.html") {
+        return FullPath;
       }
-      return null;
-    };
-    
-    const dynamicPath = findFile(__dirname);
-    if (dynamicPath) {
-      res.sendFile(dynamicPath);
-    } else {
-      res.status(404).send("Error: index.html file could not be found anywhere inside your repository files.");
+
+      if (Entry.isDirectory() && Entry.name !== "node_modules" && Entry.name !== ".git") {
+        SearchQueue.push(FullPath);
+      }
     }
   }
+
+  return null;
+}
+
+const RootIndexPath = path.join(__dirname, "index.html");
+const PublicIndexPath = path.join(__dirname, "public", "index.html");
+const SrcIndexPath = path.join(__dirname, "src", "index.html");
+const DiscoveredIndexPath = FindIndexHtml(__dirname);
+
+app.get("/", (req, res) => {
+  if (fs.existsSync(RootIndexPath)) {
+    return res.sendFile(RootIndexPath);
+  }
+
+  if (fs.existsSync(PublicIndexPath)) {
+    return res.sendFile(PublicIndexPath);
+  }
+
+  if (fs.existsSync(SrcIndexPath)) {
+    return res.sendFile(SrcIndexPath);
+  }
+
+  if (DiscoveredIndexPath) {
+    return res.sendFile(DiscoveredIndexPath);
+  }
+
+  res.status(404).send("Error: index.html file could not be found.");
 });
 
-let players = {};
+let Players = {};
 
-io.on('connection', (socket) => {
+function ClonePlayers() {
+  const Snapshot = {};
+
+  for (const Id in Players) {
+    Snapshot[Id] = {
+      id: Players[Id].id,
+      x: Players[Id].x,
+      y: Players[Id].y,
+      name: Players[Id].name,
+      score: Players[Id].score,
+      isDead: Players[Id].isDead
+    };
+  }
+
+  return Snapshot;
+}
+
+function NormalizeName(Name) {
+  if (typeof Name !== "string") return "Duck";
+  const Trimmed = Name.trim();
+  if (!Trimmed) return "Duck";
+  return Trimmed.slice(0, 10);
+}
+
+function EnsurePlayer(SocketId, Data) {
+  if (!Players[SocketId]) {
+    Players[SocketId] = {
+      id: SocketId,
+      x: typeof Data.x === "number" ? Data.x : 100,
+      y: typeof Data.y === "number" ? Data.y : 200,
+      name: NormalizeName(Data.name),
+      score: 0,
+      isDead: false,
+      connectedAt: Date.now()
+    };
+    return true;
+  }
+
+  Players[SocketId].x = typeof Data.x === "number" ? Data.x : Players[SocketId].x;
+  Players[SocketId].y = typeof Data.y === "number" ? Data.y : Players[SocketId].y;
+  Players[SocketId].name = NormalizeName(Data.name ?? Players[SocketId].name);
+  if (typeof Data.score === "number") Players[SocketId].score = Data.score;
+  if (typeof Data.isDead === "boolean") Players[SocketId].isDead = Data.isDead;
+
+  return false;
+}
+
+io.on("connection", (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
-  // 1. Handle new player joining
-  socket.on('join-game', (data) => {
-    players[socket.id] = {
-      id: socket.id,
-      x: data.x || 100,
-      y: data.y || 200,
-      name: data.name || 'Duck',
-      score: 0,
-      isDead: false
-    };
-    socket.emit('current-players', players);
-    socket.broadcast.emit('player-joined', players[socket.id]);
-  });
+  socket.on("join-game", (Data = {}) => {
+    const IsNewPlayer = EnsurePlayer(socket.id, Data);
+    socket.data.joined = true;
 
-  // 2. Handle real-time position updates
-  socket.on('update-position', (data) => {
-    if (players[socket.id]) {
-      players[socket.id].x = data.x;
-      players[socket.id].y = data.y;
-      players[socket.id].score = data.score;
-      players[socket.id].isDead = data.isDead;
-      socket.broadcast.emit('player-moved', players[socket.id]);
+    if (IsNewPlayer) {
+      socket.emit("current-players", ClonePlayers());
+      socket.broadcast.emit("player-joined", {
+        id: Players[socket.id].id,
+        x: Players[socket.id].x,
+        y: Players[socket.id].y,
+        name: Players[socket.id].name,
+        score: Players[socket.id].score,
+        isDead: Players[socket.id].isDead
+      });
+    } else {
+      socket.broadcast.emit("player-moved", {
+        id: Players[socket.id].id,
+        x: Players[socket.id].x,
+        y: Players[socket.id].y,
+        name: Players[socket.id].name,
+        score: Players[socket.id].score,
+        isDead: Players[socket.id].isDead
+      });
     }
   });
 
-  // 3. Handle player disconnections clean-up
-  socket.on('disconnect', () => {
+  socket.on("update-position", (Data = {}) => {
+    if (!Players[socket.id]) {
+      Players[socket.id] = {
+        id: socket.id,
+        x: 100,
+        y: 200,
+        name: "Duck",
+        score: 0,
+        isDead: false,
+        connectedAt: Date.now()
+      };
+    }
+
+    if (typeof Data.x === "number") Players[socket.id].x = Data.x;
+    if (typeof Data.y === "number") Players[socket.id].y = Data.y;
+    if (typeof Data.score === "number") Players[socket.id].score = Data.score;
+    if (typeof Data.isDead === "boolean") Players[socket.id].isDead = Data.isDead;
+
+    socket.broadcast.emit("player-moved", {
+      id: Players[socket.id].id,
+      x: Players[socket.id].x,
+      y: Players[socket.id].y,
+      name: Players[socket.id].name,
+      score: Players[socket.id].score,
+      isDead: Players[socket.id].isDead
+    });
+  });
+
+  socket.on("disconnect", () => {
     console.log(`Player disconnected: ${socket.id}`);
-    delete players[socket.id];
-    io.emit('player-disconnected', socket.id);
+
+    if (Players[socket.id]) {
+      delete Players[socket.id];
+      io.emit("player-disconnected", socket.id);
+    }
   });
 });
 
-// Binds to 0.0.0.0 and forces port resolution to match Railway's internal proxy settings
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, '0.0.0.0', () => {
+
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Socket.io server running on port ${PORT}`);
 });
