@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multiplayer Flappy Duck (Socket.io)</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    body {
+      margin: 0;
+      background: #4ec0ca;
+      overflow: hidden;
+      font-family: 'Arial', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    #ui {
+      margin-bottom: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      user-select: none;
+    }
+    #name {
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+      font-weight: bold;
+    }
+    canvas {
+      display: block;
+      background: #70c5ce;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    Name: <input id="name" value="Duck" maxlength="10">
+    <span style="margin-left: 20px;">Score: <span id="scoreVal">0</span></span>
+  </div>
+
+  <canvas id="game" width="400" height="600"></canvas>
+
+  <!-- Load official Socket.io client bundle via CDN -->
+  <script src="https://socket.io"></script>
+
+  <script>
+    // Local development fallback connection address
+    const SERVER_URL = "http://localhost:3000"; 
+    
+    const socket = io(SERVER_URL);
+
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreElement = document.getElementById("scoreVal");
+
+    let players = {};
+    let isGameOver = false;
+    let score = 0;
+
+    let bird = { x: 100, y: 200, v: 0, radius: 14 };
+    const gravity = 750;
+    const jump = -240;
+
+    let pipes = [];
+    let pipeTimer = 0;
+    const pipeSpawnRate = 1.8; 
+    const pipeSpeed = 140;     
+    const pipeGap = 140;       
+
+    let last = performance.now();
+    let networkTimer = 0;
+
+    socket.on('connect', () => {
+      socket.emit('join-game', {
+        name: document.getElementById("name").value,
+        x: bird.x,
+        y: bird.y
+      });
+    });
+
+    socket.on('current-players', (serverPlayers) => { players = serverPlayers; });
+    socket.on('player-joined', (newPlayer) => { players[newPlayer.id] = newPlayer; });
+    socket.on('player-disconnected', (removedId) => { delete players[removedId]; });
+    socket.on('player-moved', (updatedPlayer) => { players[updatedPlayer.id] = updatedPlayer; });
+
+    function emitNetworkUpdate() {
+      if (socket.connected) {
+        socket.emit('update-position', {
+          x: bird.x,
+          y: bird.y,
+          score: score,
+          isDead: isGameOver
+        });
+      }
+    }
+
+    document.getElementById("name").addEventListener("input", (e) => {
+      if (socket.connected) {
+        socket.emit('join-game', { name: e.target.value, x: bird.x, y: bird.y });
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isGameOver) resetGame();
+        else bird.v = jump;
+      }
+    });
+
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (isGameOver) resetGame();
+      else bird.v = jump;
+    });
+
+    function resetGame() {
+      bird.y = 200;
+      bird.v = 0;
+      pipes = [];
+      pipeTimer = 0;
+      score = 0;
+      scoreElement.innerText = score;
+      isGameOver = false;
+      emitNetworkUpdate();
+    }
+
+    function loop(t) {
+      const dt = Math.min(0.033, (t - last) / 1000); 
+      last = t;
+
+      ctx.clearRect(0, 0, 400, 600);
+
+      if (!isGameOver) {
+        bird.v += gravity * dt;
+        bird.y += bird.v * dt;
+
+        if (bird.y > 585) { bird.y = 585; isGameOver = true; }
+        if (bird.y < 0) { bird.y = 0; bird.v = 0; }
+
+        pipeTimer += dt;
+        if (pipeTimer >= pipeSpawnRate) {
+          pipeTimer = 0;
+          let minHeight = 60;
+          let maxHeight = 360;
+          let topHeight = Math.floor(Math.random() * (maxHeight - minHeight)) + minHeight;
+          pipes.push({
+            x: 400,
+            top: topHeight,
+            bottom: topHeight + pipeGap,
+            passed: false
+          });
+        }
+
+        for (let i = pipes.length - 1; i >= 0; i--) {
+          let p = pipes[i];
+          p.x -= pipeSpeed * dt;
+
+          if (p.x < -60) {
+            pipes.splice(i, 1);
+            continue;
+          }
+
+          if (!p.passed && p.x + 25 < bird.x) {
+            p.passed = true;
+            score++;
+            scoreElement.innerText = score;
+          }
+
+          if (bird.x + bird.radius > p.x && bird.x - bird.radius < p.x + 50) {
+            if (bird.y - bird.radius < p.top || bird.y + bird.radius > p.bottom) {
+              isGameOver = true;
+            }
+          }
+        }
+      }
+
+      networkTimer += dt;
+      if (networkTimer > 0.05) {
+        networkTimer = 0;
+        emitNetworkUpdate();
+      }
+
+      // Render Obstacle Gaps
+      pipes.forEach(p => {
+        ctx.fillStyle = "#73bf2e";
+        ctx.fillRect(p.x, 0, 50, p.top);
+        ctx.strokeStyle = "#538122";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(p.x, -5, 50, p.top + 5);
+
+        ctx.fillRect(p.x, p.bottom, 50, 600 - p.bottom);
+        ctx.strokeRect(p.x, p.bottom, 50, 600 - p.bottom + 5);
+      });
+
+      // Render Local Yellow Duck
+      ctx.beginPath();
+      ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#f5d323";
+      ctx.fill();
+      ctx.strokeStyle = "#d4b200";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#ff9a00";
+      ctx.ellipse(bird.x + 10, bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(bird.x + 4, bird.y - 4, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "black";
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.font = "bold 12px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText((document.getElementById("name").value || "Duck"), bird.x, bird.y - 20);
+
+      // Render Active Remote Online Players (Tinted Red Ducks)
+      for (const pid in players) {
+        if (pid === socket.id) continue; 
+
+        const p = players[pid];
+        if (!p || p.isDead) continue; 
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, bird.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = "#ff9a00";
+        ctx.ellipse(p.x + 10, p.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.font = "bold 11px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`${p.name} (${p.score || 0})`, p.x, p.y - 20);
+      }
+
+      if (isGameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, 400, 600);
+        ctx.fillStyle = "white";
+        ctx.font = "bold 30px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", 200, 260);
+        ctx.font = "16px Arial";
+        ctx.fillText("Press Space or Tap Screen to Restart", 200, 310);
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
