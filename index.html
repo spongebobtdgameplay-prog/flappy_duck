@@ -1,179 +1,383 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-const fs = require('fs');
-
-const app = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
-app.get('/', (req, res) => {
-  const Paths = [
-    path.join(__dirname, 'index.html'),
-    path.join(__dirname, 'public', 'index.html'),
-    path.join(__dirname, 'src', 'index.html')
-  ];
-
-  for (const FilePath of Paths) {
-    if (fs.existsSync(FilePath)) {
-      return res.sendFile(FilePath);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>True Multiplayer Flappy Duck</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    body {
+      margin: 0;
+      background: #4ec0ca;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
     }
-  }
+    #ui {
+      margin-bottom: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+      user-select: none;
+    }
+    #name {
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+      font-weight: bold;
+    }
+    canvas {
+      display: block;
+      background: #70c5ce;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    Name: <input id="name" value="Duck" maxlength="10">
+    <span style="margin-left: 20px;">Score: <span id="scoreVal">0</span></span>
+  </div>
 
-  const FindIndexHtml = (Dir) => {
-    let Entries;
-    try {
-      Entries = fs.readdirSync(Dir, { withFileTypes: true });
-    } catch {
-      return null;
+  <canvas id="game" width="400" height="600"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io(window.location.origin);
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreElement = document.getElementById("scoreVal");
+    const nameInput = document.getElementById("name");
+
+    let players = {};
+    let remoteBuffer = {};
+    let isGameOver = false;
+    let score = 0;
+
+    let bird = { x: 100, y: 200, v: 0, radius: 14 };
+    const gravity = 750;
+    const jump = -240;
+
+    let pipes = [];
+    let pipeTimer = 0;
+    const pipeSpawnRate = 1.8;
+    const pipeSpeed = 140;
+    const pipeGap = 140;
+
+    let currentBlockTime = Math.floor(Date.now() / 60000) * 60;
+    let pipeSequenceCounter = 0;
+
+    const SNAPSHOT_DELAY = 100;
+    const MAX_HISTORY = 12;
+    const OFFSCREEN_PAD = 50;
+
+    function seededRandom(seed) {
+      let x = Math.sin(seed++) * 10000;
+      return x - Math.floor(x);
     }
 
-    for (const Entry of Entries) {
-      const FullPath = path.join(Dir, Entry.name);
-
-      if (Entry.isFile() && Entry.name.toLowerCase() === 'index.html') {
-        return FullPath;
-      }
-
-      if (Entry.isDirectory() && Entry.name !== 'node_modules' && Entry.name !== '.git') {
-        const Found = FindIndexHtml(FullPath);
-        if (Found) return Found;
-      }
-    }
-
-    return null;
-  };
-
-  const FoundPath = FindIndexHtml(__dirname);
-
-  if (FoundPath) {
-    return res.sendFile(FoundPath);
-  }
-
-  res.status(404).send('index.html not found');
-});
-
-let players = {};
-
-function ClonePlayers() {
-  const Out = {};
-  for (const id in players) {
-    Out[id] = {
-      id: players[id].id,
-      x: players[id].x,
-      y: players[id].y,
-      name: players[id].name,
-      score: players[id].score,
-      isDead: players[id].isDead
-    };
-  }
-  return Out;
-}
-
-function NormalizeName(Name) {
-  if (typeof Name !== 'string') return 'Duck';
-  const Clean = Name.trim();
-  if (!Clean) return 'Duck';
-  return Clean.slice(0, 10);
-}
-
-function EnsurePlayer(socketId, data) {
-  const Name = NormalizeName(data && data.name);
-  const X = typeof data?.x === 'number' ? data.x : 100;
-  const Y = typeof data?.y === 'number' ? data.y : 200;
-
-  if (!players[socketId]) {
-    players[socketId] = {
-      id: socketId,
-      x: X,
-      y: Y,
-      name: Name,
-      score: 0,
-      isDead: false
-    };
-    return true;
-  }
-
-  players[socketId].x = X;
-  players[socketId].y = Y;
-  players[socketId].name = Name || players[socketId].name || 'Duck';
-
-  if (typeof data?.score === 'number') players[socketId].score = data.score;
-  if (typeof data?.isDead === 'boolean') players[socketId].isDead = data.isDead;
-
-  return false;
-}
-
-io.on('connection', (socket) => {
-  socket.on('join-game', (data = {}) => {
-    const IsNew = EnsurePlayer(socket.id, data);
-    socket.emit('current-players', ClonePlayers());
-
-    if (IsNew) {
-      socket.broadcast.emit('player-joined', {
-        id: players[socket.id].id,
-        x: players[socket.id].x,
-        y: players[socket.id].y,
-        name: players[socket.id].name,
-        score: players[socket.id].score,
-        isDead: players[socket.id].isDead
+    function pushSnapshot(id, data) {
+      if (!remoteBuffer[id]) remoteBuffer[id] = [];
+      remoteBuffer[id].push({
+        x: data.x,
+        y: data.y,
+        score: data.score || 0,
+        isDead: !!data.isDead,
+        name: data.name || "Duck",
+        t: Date.now()
       });
-    } else {
-      socket.broadcast.emit('player-state', {
-        id: players[socket.id].id,
-        x: players[socket.id].x,
-        y: players[socket.id].y,
-        name: players[socket.id].name,
-        score: players[socket.id].score,
-        isDead: players[socket.id].isDead
+      if (remoteBuffer[id].length > MAX_HISTORY) {
+        remoteBuffer[id].shift();
+      }
+    }
+
+    function sendJoin() {
+      if (!socket.connected) return;
+      socket.emit("join-game", {
+        name: nameInput.value || "Duck",
+        x: bird.x,
+        y: bird.y,
+        score: score,
+        isDead: isGameOver
       });
     }
-  });
 
-  socket.on('update-position', (data = {}) => {
-    if (!players[socket.id]) {
-      players[socket.id] = {
-        id: socket.id,
-        x: 100,
-        y: 200,
-        name: 'Duck',
-        score: 0,
-        isDead: false
+    socket.on("connect", () => {
+      sendJoin();
+    });
+
+    socket.on("current-players", (serverPlayers) => {
+      players = serverPlayers || {};
+      remoteBuffer = {};
+      const now = Date.now();
+      for (const id in serverPlayers) {
+        remoteBuffer[id] = [{
+          x: serverPlayers[id].x,
+          y: serverPlayers[id].y,
+          score: serverPlayers[id].score || 0,
+          isDead: !!serverPlayers[id].isDead,
+          name: serverPlayers[id].name || "Duck",
+          t: now
+        }];
+      }
+    });
+
+    socket.on("player-joined", (p) => {
+      players[p.id] = p;
+      pushSnapshot(p.id, p);
+    });
+
+    socket.on("player-state", (p) => {
+      players[p.id] = p;
+      pushSnapshot(p.id, p);
+    });
+
+    socket.on("player-disconnected", (id) => {
+      delete players[id];
+      delete remoteBuffer[id];
+    });
+
+    function emitNetworkUpdate() {
+      if (!socket.connected) return;
+      socket.emit("update-position", {
+        x: bird.x,
+        y: bird.y,
+        score: score,
+        isDead: isGameOver
+      });
+    }
+
+    nameInput.addEventListener("input", () => {
+      sendJoin();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isGameOver) {
+          resetGame();
+        } else {
+          bird.v = jump;
+        }
+      }
+    });
+
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (isGameOver) {
+        resetGame();
+      } else {
+        bird.v = jump;
+      }
+    });
+
+    function resetGame() {
+      bird.y = 200;
+      bird.v = 0;
+      pipes = [];
+      pipeTimer = 0;
+      score = 0;
+      scoreElement.innerText = score;
+      isGameOver = false;
+      currentBlockTime = Math.floor(Date.now() / 60000) * 60;
+      pipeSequenceCounter = 0;
+      sendJoin();
+      emitNetworkUpdate();
+    }
+
+    function getInterpolatedRemotePlayer(history, renderTime) {
+      if (!history || history.length === 0) return null;
+      if (history.length === 1) return history[0];
+
+      if (renderTime <= history[0].t) return history[0];
+      if (renderTime >= history[history.length - 1].t) return history[history.length - 1];
+
+      let a = history[0];
+      let b = history[1];
+
+      for (let i = 0; i < history.length - 1; i++) {
+        if (history[i].t <= renderTime && history[i + 1].t >= renderTime) {
+          a = history[i];
+          b = history[i + 1];
+          break;
+        }
+      }
+
+      const span = Math.max(1, b.t - a.t);
+      const alpha = Math.min(1, Math.max(0, (renderTime - a.t) / span));
+
+      return {
+        x: a.x + (b.x - a.x) * alpha,
+        y: a.y + (b.y - a.y) * alpha,
+        score: b.score,
+        isDead: b.isDead,
+        name: b.name
       };
     }
 
-    if (typeof data.x === 'number') players[socket.id].x = data.x;
-    if (typeof data.y === 'number') players[socket.id].y = data.y;
-    if (typeof data.score === 'number') players[socket.id].score = data.score;
-    if (typeof data.isDead === 'boolean') players[socket.id].isDead = data.isDead;
+    let last = performance.now();
+    let networkTimer = 0;
 
-    io.emit('player-state', {
-      id: players[socket.id].id,
-      x: players[socket.id].x,
-      y: players[socket.id].y,
-      name: players[socket.id].name,
-      score: players[socket.id].score,
-      isDead: players[socket.id].isDead
-    });
-  });
+    function loop(t) {
+      const dt = Math.min(0.033, (t - last) / 1000);
+      last = t;
 
-  socket.on('disconnect', () => {
-    if (players[socket.id]) {
-      delete players[socket.id];
-      io.emit('player-disconnected', socket.id);
+      ctx.clearRect(0, 0, 400, 600);
+
+      if (!isGameOver) {
+        bird.v += gravity * dt;
+        bird.y += bird.v * dt;
+
+        if (bird.y > 585) {
+          bird.y = 585;
+          isGameOver = true;
+        }
+
+        if (bird.y < 0) {
+          bird.y = 0;
+          bird.v = 0;
+        }
+
+        pipeTimer += dt;
+        if (pipeTimer >= pipeSpawnRate) {
+          pipeTimer = 0;
+          pipeSequenceCounter++;
+
+          const uniqueSeed = currentBlockTime + pipeSequenceCounter;
+          const pseudoRandomValue = seededRandom(uniqueSeed);
+
+          const minHeight = 60;
+          const maxHeight = 360;
+          const topHeight = Math.floor(pseudoRandomValue * (maxHeight - minHeight)) + minHeight;
+
+          pipes.push({
+            x: 400,
+            top: topHeight,
+            bottom: topHeight + pipeGap,
+            passed: false
+          });
+        }
+
+        for (let i = pipes.length - 1; i >= 0; i--) {
+          const p = pipes[i];
+          p.x -= pipeSpeed * dt;
+
+          if (p.x < -60) {
+            pipes.splice(i, 1);
+            continue;
+          }
+
+          if (!p.passed && p.x + 25 < bird.x) {
+            p.passed = true;
+            score++;
+            scoreElement.innerText = score;
+          }
+
+          if (bird.x + bird.radius > p.x && bird.x - bird.radius < p.x + 50) {
+            if (bird.y - bird.radius < p.top || bird.y + bird.radius > p.bottom) {
+              isGameOver = true;
+            }
+          }
+        }
+      }
+
+      networkTimer += dt;
+      if (networkTimer > 0.05) {
+        networkTimer = 0;
+        emitNetworkUpdate();
+      }
+
+      pipes.forEach(p => {
+        ctx.fillStyle = "#73bf2e";
+        ctx.fillRect(p.x, 0, 50, p.top);
+        ctx.strokeStyle = "#538122";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(p.x, -5, 50, p.top + 5);
+        ctx.fillRect(p.x, p.bottom, 50, 600 - p.bottom);
+        ctx.strokeRect(p.x, p.bottom, 50, 600 - p.bottom + 5);
+      });
+
+      ctx.beginPath();
+      ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#f5d323";
+      ctx.fill();
+      ctx.strokeStyle = "#d4b200";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#ff9a00";
+      ctx.ellipse(bird.x + 10, bird.y + 2, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(bird.x + 4, bird.y - 4, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "black";
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.font = "bold 12px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(nameInput.value || "Duck", bird.x, bird.y - 20);
+
+      const renderTime = Date.now() - SNAPSHOT_DELAY;
+
+      for (const id in remoteBuffer) {
+        if (id === socket.id) continue;
+
+        const history = remoteBuffer[id];
+        if (!history || history.length === 0) continue;
+
+        const latest = history[history.length - 1];
+        if (latest.isDead) continue;
+
+        const remote = getInterpolatedRemotePlayer(history, renderTime);
+        if (!remote) continue;
+
+        if (remote.x < -OFFSCREEN_PAD || remote.x > canvas.width + OFFSCREEN_PAD) continue;
+
+        ctx.beginPath();
+        ctx.arc(remote.x, remote.y, bird.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = "#ff9a00";
+        ctx.ellipse(remote.x + 10, remote.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.font = "bold 11px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(`${remote.name || "Duck"} (${remote.score || 0})`, remote.x, remote.y - 20);
+      }
+
+      if (isGameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, 400, 600);
+        ctx.fillStyle = "white";
+        ctx.font = "bold 30px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", 200, 260);
+        ctx.font = "16px Arial";
+        ctx.fillText("Press Space or Tap Screen to Restart", 200, 310);
+      }
+
+      requestAnimationFrame(loop);
     }
-  });
-});
 
-const PORT = process.env.PORT || 8080;
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Socket.io server running on port ${PORT}`);
-});
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
