@@ -91,7 +91,6 @@
     });
 
     socket.on('current-players', (serverPlayers) => { 
-      // Capture incoming network data and attach local receiving timestamps
       for (let id in serverPlayers) {
         serverPlayers[id].receivedAt = Date.now();
       }
@@ -266,13 +265,16 @@
         const p = players[pid];
         if (!p || p.isDead) continue; 
 
-        // GOATED SMOOTHING LOGIC (Linear Extrapolation):
-        // Calculate exactly how many seconds old this packet is.
+        // Linear Extrapolation Lag Smoothing
         let latencySeconds = (currentTime - (p.receivedAt || currentTime)) / 1000;
-        
-        // Since the map/pipes move left at 'pipeSpeed' pixels per second,
-        // we shift their X coordinate right to match where they actually are right now!
         let smoothedX = p.x + (pipeSpeed * latencySeconds);
+
+        // FIXED MULTIPLAYER VISUAL RENDERING CULL:
+        // If the competitor drops off the left side (-30px) or flies past the right side (430px), 
+        // the engine skips drawing them entirely, keeping your canvas clean.
+        if (smoothedX < -30 || smoothedX > 430) {
+          continue;
+        }
 
         ctx.beginPath();
         ctx.arc(smoothedX, p.y, bird.radius, 0, Math.PI * 2);
