@@ -48,11 +48,10 @@
 
   <canvas id="game" width="400" height="600"></canvas>
 
-  <!-- GOATED FIX: Loads the client library directly from your own running server container -->
+  <!-- Loads the client library directly from your running server container -->
   <script src="/socket.io/socket.io.js"></script>
 
   <script>
-    // Points directly to its own self-hosted asset window
     const SERVER_URL = window.location.origin; 
     const socket = io(SERVER_URL);
 
@@ -91,10 +90,25 @@
       });
     });
 
-    socket.on('current-players', (serverPlayers) => { players = serverPlayers; });
-    socket.on('player-joined', (newPlayer) => { players[newPlayer.id] = newPlayer; });
+    socket.on('current-players', (serverPlayers) => { 
+      // Capture incoming network data and attach local receiving timestamps
+      for (let id in serverPlayers) {
+        serverPlayers[id].receivedAt = Date.now();
+      }
+      players = serverPlayers; 
+    });
+
+    socket.on('player-joined', (newPlayer) => { 
+      newPlayer.receivedAt = Date.now();
+      players[newPlayer.id] = newPlayer; 
+    });
+
     socket.on('player-disconnected', (removedId) => { delete players[removedId]; });
-    socket.on('player-moved', (updatedPlayer) => { players[updatedPlayer.id] = updatedPlayer; });
+
+    socket.on('player-moved', (updatedPlayer) => { 
+      updatedPlayer.receivedAt = Date.now();
+      players[updatedPlayer.id] = updatedPlayer; 
+    });
 
     function emitNetworkUpdate() {
       if (socket.connected) {
@@ -245,14 +259,23 @@
       ctx.fillText((document.getElementById("name").value || "Duck"), bird.x, bird.y - 20);
 
       // Render Remote Competitors (Red Ducks)
+      const currentTime = Date.now();
       for (const pid in players) {
         if (pid === socket.id) continue; 
 
         const p = players[pid];
         if (!p || p.isDead) continue; 
 
+        // GOATED SMOOTHING LOGIC (Linear Extrapolation):
+        // Calculate exactly how many seconds old this packet is.
+        let latencySeconds = (currentTime - (p.receivedAt || currentTime)) / 1000;
+        
+        // Since the map/pipes move left at 'pipeSpeed' pixels per second,
+        // we shift their X coordinate right to match where they actually are right now!
+        let smoothedX = p.x + (pipeSpeed * latencySeconds);
+
         ctx.beginPath();
-        ctx.arc(p.x, p.y, bird.radius, 0, Math.PI * 2);
+        ctx.arc(smoothedX, p.y, bird.radius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
         ctx.fill();
         ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
@@ -261,14 +284,14 @@
 
         ctx.beginPath();
         ctx.fillStyle = "#ff9a00";
-        ctx.ellipse(p.x + 10, p.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(smoothedX + 10, p.y + 2, 8, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
         ctx.font = "bold 11px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(`${p.name} (${p.score || 0})`, p.x, p.y - 20);
+        ctx.fillText(`${p.name} (${p.score || 0})`, smoothedX, p.y - 20);
       }
 
       if (isGameOver) {
