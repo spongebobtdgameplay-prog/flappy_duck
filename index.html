@@ -9,7 +9,7 @@
       margin: 0;
       background: #4ec0ca;
       overflow: hidden;
-      font-family: 'Arial', sans-serif;
+      font-family: Arial, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -40,7 +40,6 @@
   </style>
 </head>
 <body>
-
   <div id="ui">
     Name: <input id="name" value="Duck" maxlength="10">
     <span style="margin-left: 20px;">Score: <span id="scoreVal">0</span></span>
@@ -48,18 +47,18 @@
 
   <canvas id="game" width="400" height="600"></canvas>
 
-  <!-- Loads the client library directly from your running server container -->
   <script src="/socket.io/socket.io.js"></script>
-
   <script>
-    const SERVER_URL = window.location.origin; 
+    const SERVER_URL = window.location.origin;
     const socket = io(SERVER_URL);
 
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const scoreElement = document.getElementById("scoreVal");
+    const nameInput = document.getElementById("name");
 
     let players = {};
+    let playerStates = {};
     let isGameOver = false;
     let score = 0;
 
@@ -69,49 +68,87 @@
 
     let pipes = [];
     let pipeTimer = 0;
-    const pipeSpawnRate = 1.8; 
-    const pipeSpeed = 140;     
-    const pipeGap = 140;       
+    const pipeSpawnRate = 1.8;
+    const pipeSpeed = 140;
+    const pipeGap = 140;
 
-    // Anchors the obstacle layout maps strictly to global real-world clock time
     let currentBlockTime = Math.floor(Date.now() / 60000) * 60;
     let pipeSequenceCounter = 0;
+
+    const INTERP_DELAY = 0.08;
+    const MAX_HISTORY = 12;
+    const OFFSCREEN_PAD = 50;
+    const STALE_PLAYER_TIMEOUT = 2500;
 
     function seededRandom(seed) {
       let x = Math.sin(seed++) * 10000;
       return x - Math.floor(x);
     }
 
-    socket.on('connect', () => {
-      socket.emit('join-game', {
-        name: document.getElementById("name").value,
-        x: bird.x,
-        y: bird.y
-      });
-    });
-
-    socket.on('current-players', (serverPlayers) => { 
-      for (let id in serverPlayers) {
-        serverPlayers[id].receivedAt = Date.now();
+    function pushPlayerSample(id, data, timeStamp) {
+      if (!playerStates[id]) {
+        playerStates[id] = [];
       }
-      players = serverPlayers; 
+
+      playerStates[id].push({
+        x: data.x,
+        y: data.y,
+        score: data.score || 0,
+        isDead: !!data.isDead,
+        name: data.name || "Duck",
+        t: timeStamp
+      });
+
+      while (playerStates[id].length > MAX_HISTORY) {
+        playerStates[id].shift();
+      }
+    }
+
+    function updateLocalName() {
+      if (socket.connected) {
+        socket.emit("join-game", {
+          name: nameInput.value || "Duck",
+          x: bird.x,
+          y: bird.y
+        });
+      }
+    }
+
+    socket.on("connect", () => {
+      updateLocalName();
     });
 
-    socket.on('player-joined', (newPlayer) => { 
-      newPlayer.receivedAt = Date.now();
-      players[newPlayer.id] = newPlayer; 
+    socket.on("current-players", (serverPlayers) => {
+      const now = performance.now();
+
+      players = serverPlayers || {};
+      playerStates = {};
+
+      for (const id in serverPlayers) {
+        pushPlayerSample(id, serverPlayers[id], now);
+      }
     });
 
-    socket.on('player-disconnected', (removedId) => { delete players[removedId]; });
+    socket.on("player-joined", (newPlayer) => {
+      const now = performance.now();
+      players[newPlayer.id] = newPlayer;
+      pushPlayerSample(newPlayer.id, newPlayer, now);
+    });
 
-    socket.on('player-moved', (updatedPlayer) => { 
-      updatedPlayer.receivedAt = Date.now();
-      players[updatedPlayer.id] = updatedPlayer; 
+    socket.on("player-disconnected", (removedId) => {
+      delete players[removedId];
+      delete playerStates[removedId];
+    });
+
+    socket.on("player-moved", (updatedPlayer) => {
+      const now = performance.now();
+      players[updatedPlayer.id] = updatedPlayer;
+      pushPlayerSample(updatedPlayer.id, updatedPlayer, now);
     });
 
     function emitNetworkUpdate() {
       if (socket.connected) {
-        socket.emit('update-position', {
+        socket.emit("update-position", {
           x: bird.x,
           y: bird.y,
           score: score,
@@ -120,24 +157,28 @@
       }
     }
 
-    document.getElementById("name").addEventListener("input", (e) => {
-      if (socket.connected) {
-        socket.emit('join-game', { name: e.target.value, x: bird.x, y: bird.y });
-      }
+    nameInput.addEventListener("input", () => {
+      updateLocalName();
     });
 
     document.addEventListener("keydown", (e) => {
       if (e.code === "Space") {
         e.preventDefault();
-        if (isGameOver) resetGame();
-        else bird.v = jump;
+        if (isGameOver) {
+          resetGame();
+        } else {
+          bird.v = jump;
+        }
       }
     });
 
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
-      if (isGameOver) resetGame();
-      else bird.v = jump;
+      if (isGameOver) {
+        resetGame();
+      } else {
+        bird.v = jump;
+      }
     });
 
     function resetGame() {
@@ -148,18 +189,61 @@
       score = 0;
       scoreElement.innerText = score;
       isGameOver = false;
-      
       currentBlockTime = Math.floor(Date.now() / 60000) * 60;
       pipeSequenceCounter = 0;
-      
       emitNetworkUpdate();
+    }
+
+    function getInterpolatedRemotePlayer(pid, renderTime) {
+      const history = playerStates[pid];
+      if (!history || history.length === 0) {
+        return null;
+      }
+
+      if (history.length === 1) {
+        return history[0];
+      }
+
+      let prev = history[0];
+      let next = history[history.length - 1];
+
+      for (let i = 0; i < history.length - 1; i++) {
+        if (history[i].t <= renderTime && history[i + 1].t >= renderTime) {
+          prev = history[i];
+          next = history[i + 1];
+          break;
+        }
+      }
+
+      if (renderTime <= history[0].t) {
+        return history[0];
+      }
+
+      if (renderTime >= history[history.length - 1].t) {
+        return history[history.length - 1];
+      }
+
+      const span = next.t - prev.t;
+      if (span <= 0) {
+        return next;
+      }
+
+      const alpha = Math.min(1, Math.max(0, (renderTime - prev.t) / span));
+
+      return {
+        x: prev.x + (next.x - prev.x) * alpha,
+        y: prev.y + (next.y - prev.y) * alpha,
+        score: next.score,
+        isDead: next.isDead,
+        name: next.name
+      };
     }
 
     let last = performance.now();
     let networkTimer = 0;
 
     function loop(t) {
-      const dt = Math.min(0.033, (t - last) / 1000); 
+      const dt = Math.min(0.033, (t - last) / 1000);
       last = t;
 
       ctx.clearRect(0, 0, 400, 600);
@@ -168,21 +252,28 @@
         bird.v += gravity * dt;
         bird.y += bird.v * dt;
 
-        if (bird.y > 585) { bird.y = 585; isGameOver = true; }
-        if (bird.y < 0) { bird.y = 0; bird.v = 0; }
+        if (bird.y > 585) {
+          bird.y = 585;
+          isGameOver = true;
+        }
+
+        if (bird.y < 0) {
+          bird.y = 0;
+          bird.v = 0;
+        }
 
         pipeTimer += dt;
         if (pipeTimer >= pipeSpawnRate) {
           pipeTimer = 0;
           pipeSequenceCounter++;
 
-          let uniqueSeed = currentBlockTime + pipeSequenceCounter;
-          let pseudoRandomValue = seededRandom(uniqueSeed);
+          const uniqueSeed = currentBlockTime + pipeSequenceCounter;
+          const pseudoRandomValue = seededRandom(uniqueSeed);
 
-          let minHeight = 60;
-          let maxHeight = 360;
-          let topHeight = Math.floor(pseudoRandomValue * (maxHeight - minHeight)) + minHeight;
-          
+          const minHeight = 60;
+          const maxHeight = 360;
+          const topHeight = Math.floor(pseudoRandomValue * (maxHeight - minHeight)) + minHeight;
+
           pipes.push({
             x: 400,
             top: topHeight,
@@ -192,7 +283,7 @@
         }
 
         for (let i = pipes.length - 1; i >= 0; i--) {
-          let p = pipes[i];
+          const p = pipes[i];
           p.x -= pipeSpeed * dt;
 
           if (p.x < -60) {
@@ -220,7 +311,6 @@
         emitNetworkUpdate();
       }
 
-      // Render Synchronized Obstacles
       pipes.forEach(p => {
         ctx.fillStyle = "#73bf2e";
         ctx.fillRect(p.x, 0, 50, p.top);
@@ -232,7 +322,6 @@
         ctx.strokeRect(p.x, p.bottom, 50, 600 - p.bottom + 5);
       });
 
-      // Render Local Yellow Duck Player
       ctx.beginPath();
       ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
       ctx.fillStyle = "#f5d323";
@@ -255,29 +344,30 @@
       ctx.fillStyle = "black";
       ctx.font = "bold 12px Arial";
       ctx.textAlign = "center";
-      ctx.fillText((document.getElementById("name").value || "Duck"), bird.x, bird.y - 20);
+      ctx.fillText(nameInput.value || "Duck", bird.x, bird.y - 20);
 
-      // Render Remote Competitors (Red Ducks)
-      const currentTime = Date.now();
-      for (const pid in players) {
-        if (pid === socket.id) continue; 
+      const renderTime = performance.now() - INTERP_DELAY * 1000;
 
-        const p = players[pid];
-        if (!p || p.isDead) continue; 
+      for (const pid in playerStates) {
+        if (pid === socket.id) continue;
 
-        // Linear Extrapolation Lag Smoothing
-        let latencySeconds = (currentTime - (p.receivedAt || currentTime)) / 1000;
-        let smoothedX = p.x + (pipeSpeed * latencySeconds);
+        const history = playerStates[pid];
+        if (!history || history.length === 0) continue;
 
-        // FIXED MULTIPLAYER VISUAL RENDERING CULL:
-        // If the competitor drops off the left side (-30px) or flies past the right side (430px), 
-        // the engine skips drawing them entirely, keeping your canvas clean.
-        if (smoothedX < -30 || smoothedX > 430) {
-          continue;
-        }
+        const latest = history[history.length - 1];
+        if (performance.now() - latest.t > STALE_PLAYER_TIMEOUT) continue;
+        if (latest.isDead) continue;
+
+        const remote = getInterpolatedRemotePlayer(pid, renderTime);
+        if (!remote) continue;
+
+        const x = remote.x;
+        const y = remote.y;
+
+        if (x < -OFFSCREEN_PAD || x > canvas.width + OFFSCREEN_PAD) continue;
 
         ctx.beginPath();
-        ctx.arc(smoothedX, p.y, bird.radius, 0, Math.PI * 2);
+        ctx.arc(x, y, bird.radius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(235, 80, 80, 0.75)";
         ctx.fill();
         ctx.strokeStyle = "rgba(180, 40, 40, 0.8)";
@@ -286,14 +376,14 @@
 
         ctx.beginPath();
         ctx.fillStyle = "#ff9a00";
-        ctx.ellipse(smoothedX + 10, p.y + 2, 8, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + 10, y + 2, 8, 4, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
         ctx.font = "bold 11px Arial";
         ctx.textAlign = "center";
-        ctx.fillText(`${p.name} (${p.score || 0})`, smoothedX, p.y - 20);
+        ctx.fillText(`${remote.name || "Duck"} (${remote.score || 0})`, x, y - 20);
       }
 
       if (isGameOver) {
