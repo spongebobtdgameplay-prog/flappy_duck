@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const session = require('express-session');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
 
@@ -12,59 +11,22 @@ const io = new Server(server, { cors: { origin: true, credentials: true } });
 
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
+const AUTH_COOKIE = 'fd_auth';
+const AUTH_SECRET = process.env.SESSION_SECRET || 'flappy-duck-secret';
 const ADMIN_EMAIL = '350408962@tdsb.ca';
 
 const CHAT_MAX_MESSAGES = 60;
 const CHAT_TTL_MS = 1000 * 60 * 60 * 24 * 2;
-
-const REPORT_KEY = 'flappy_duck_reports_v1';
 const REPORT_CATEGORIES = ['Hacker', 'Bug', 'Cheat', 'Other'];
 const REPORT_MAX = 200;
-
-const SUGGEST_KEY = 'flappy_duck_suggestions_v1';
 const SUGGEST_CATEGORIES = ['Gameplay', 'Shop', 'Teams', 'UI', 'Other'];
 const SUGGEST_MAX = 200;
-
-const TEAM_KEY = 'flappy_duck_teams_v1';
-const EVENT_KEY = 'flappy_duck_events_v1';
-const TEAM_WAR_KEY = 'flappy_duck_teamwars_v1';
 const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
-
-const ACCOUNT_KEY = 'flappy_duck_accounts_v4';
-const ACCOUNT_SESSION_KEY = 'flappy_duck_account_session_v4';
-const LEADERBOARD_KEY = 'flappy_duck_leaderboard_v4';
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'flappy-duck-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax' }
-  })
-);
 app.use(express.static(path.join(__dirname, 'public')));
 
-function defaultAccountState() {
-  return { nextId: 1, accounts: [] };
-}
-function defaultBoard() { return []; }
-function defaultChat() { return []; }
-function defaultReports() { return { reports: [] }; }
-function defaultSuggestions() { return { suggestions: [] }; }
-function defaultTeams() { return { teams: [] }; }
-function weekStartMs(ts = Date.now()) {
-  const d = new Date(ts);
-  const day = (d.getUTCDay() + 6) % 7;
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - day);
-  return d.getTime();
-}
-function currentSeason() {
-  const startsAt = weekStartMs(Date.now());
-  return { id: new Date(startsAt).toISOString().slice(0, 10), startsAt, endsAt: startsAt + WEEK_MS };
-}
 function defaultEvents() {
   const season = currentSeason();
   return {
@@ -76,35 +38,39 @@ function defaultEvents() {
     ]
   };
 }
+
 function defaultTeamWars() {
   const season = currentSeason();
   return { seasonId: season.id, startsAt: season.startsAt, endsAt: season.endsAt, teams: [] };
 }
+
 function defaultData() {
   return {
-    accounts: defaultAccountState().accounts,
-    leaderboard: defaultBoard(),
-    chat: defaultChat(),
-    reports: defaultReports().reports,
-    suggestions: defaultSuggestions().suggestions,
-    teams: defaultTeams().teams,
+    accounts: [],
+    leaderboard: [],
+    chat: [],
+    reports: [],
+    suggestions: [],
+    teams: [],
     teamWars: defaultTeamWars(),
     events: defaultEvents()
   };
 }
+
 function normalizeData(data) {
   const base = defaultData();
   const out = Object.assign({}, base, data || {});
-  out.accounts = out.accounts && Array.isArray(out.accounts.accounts) ? out.accounts.accounts : (Array.isArray(out.accounts) ? out.accounts : []);
+  out.accounts = Array.isArray(out.accounts) ? out.accounts : [];
   out.leaderboard = Array.isArray(out.leaderboard) ? out.leaderboard : [];
   out.chat = Array.isArray(out.chat) ? out.chat : [];
-  out.reports = out.reports && Array.isArray(out.reports.reports) ? out.reports.reports : (Array.isArray(out.reports) ? out.reports : []);
-  out.suggestions = out.suggestions && Array.isArray(out.suggestions.suggestions) ? out.suggestions.suggestions : (Array.isArray(out.suggestions) ? out.suggestions : []);
-  out.teams = out.teams && Array.isArray(out.teams.teams) ? out.teams.teams : (Array.isArray(out.teams) ? out.teams : []);
+  out.reports = Array.isArray(out.reports) ? out.reports : [];
+  out.suggestions = Array.isArray(out.suggestions) ? out.suggestions : [];
+  out.teams = Array.isArray(out.teams) ? out.teams : [];
   if (!out.teamWars || typeof out.teamWars !== 'object' || !Array.isArray(out.teamWars.teams)) out.teamWars = defaultTeamWars();
   if (!out.events || typeof out.events !== 'object' || !Array.isArray(out.events.featured)) out.events = defaultEvents();
   return out;
 }
+
 function readData() {
   try {
     if (!fs.existsSync(DATA_FILE)) return defaultData();
@@ -113,12 +79,14 @@ function readData() {
     return defaultData();
   }
 }
+
 function writeData(data) {
   const clean = normalizeData(data);
   const tmp = DATA_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(clean, null, 2), 'utf8');
   fs.renameSync(tmp, DATA_FILE);
 }
+
 function sanitizeText(text, maxLen = 240) {
   return String(text || '')
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
@@ -126,31 +94,72 @@ function sanitizeText(text, maxLen = 240) {
     .replace(/\s+/g, ' ')
     .slice(0, maxLen);
 }
+
 function sanitizeUsername(name) {
   const cleaned = String(name || '').trim().replace(/\s+/g, ' ');
   if (!/^[A-Za-z0-9 ]{3,16}$/.test(cleaned)) return '';
   return cleaned;
 }
+
 function hashPassword(password) {
   return crypto.createHash('sha256').update(String(password || ''), 'utf8').digest('hex');
 }
+
+function signValue(value) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(String(value || ''), 'utf8').digest('hex');
+}
+
+function makeAuthCookie(accountId) {
+  const id = String(accountId || '').trim();
+  if (!id) return '';
+  return `${id}.${signValue(id)}`;
+}
+
+function parseCookies(req) {
+  const header = String(req.headers.cookie || '');
+  if (!header) return {};
+  const out = {};
+  header.split(';').forEach(pair => {
+    const idx = pair.indexOf('=');
+    if (idx < 0) return;
+    const key = pair.slice(0, idx).trim();
+    const val = pair.slice(idx + 1).trim();
+    out[key] = decodeURIComponent(val);
+  });
+  return out;
+}
+
 function getSessionAccountId(req) {
-  return String(req.session.accountId || '').trim();
+  const raw = parseCookies(req)[AUTH_COOKIE];
+  if (!raw) return '';
+  const dot = raw.lastIndexOf('.');
+  if (dot < 1) return '';
+  const id = raw.slice(0, dot);
+  const sig = raw.slice(dot + 1);
+  if (sig !== signValue(id)) return '';
+  return String(id || '').trim();
 }
-function setSessionAccountId(req, accountId) {
-  req.session.accountId = String(accountId || '').trim();
+
+function setAuthCookie(res, accountId) {
+  const value = makeAuthCookie(accountId);
+  if (!value) return;
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax`);
 }
-function clearSessionAccountId(req) {
-  delete req.session.accountId;
+
+function clearAuthCookie(res) {
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
 }
+
 function findAccountById(data, accountId) {
   return (data.accounts || []).find(a => String(a.accountId) === String(accountId)) || null;
 }
+
 function findAccountByUsername(data, username) {
   const clean = sanitizeUsername(username);
   if (!clean) return null;
   return (data.accounts || []).find(a => String(a.username || '').toLowerCase() === clean.toLowerCase()) || null;
 }
+
 function publicAccount(account) {
   if (!account) return null;
   return {
@@ -172,12 +181,27 @@ function publicAccount(account) {
     moderator: false
   };
 }
+
 function currentAccount(req) {
   const data = readData();
   const id = getSessionAccountId(req);
   if (!id) return null;
   return findAccountById(data, id);
 }
+
+function currentSeason() {
+  const startsAt = weekStartMs(Date.now());
+  return { id: new Date(startsAt).toISOString().slice(0, 10), startsAt, endsAt: startsAt + WEEK_MS };
+}
+
+function weekStartMs(ts = Date.now()) {
+  const d = new Date(ts);
+  const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - day);
+  return d.getTime();
+}
+
 function upsertLeaderboardRow(data, accountId, username, best, coins) {
   const cleanName = sanitizeUsername(username) || 'Guest';
   const idx = data.leaderboard.findIndex(r => String(r.key || '') === String(accountId));
@@ -198,11 +222,13 @@ function upsertLeaderboardRow(data, accountId, username, best, coins) {
   data.leaderboard.sort((a, b) => (Number(b.best) || 0) - (Number(a.best) || 0) || (Number(b.coins) || 0) - (Number(a.coins) || 0));
   data.leaderboard = data.leaderboard.slice(0, 25);
 }
+
 function readChat(data) {
   const now = Date.now();
   data.chat = (data.chat || []).filter(m => m && m.ts && now - Number(m.ts) <= CHAT_TTL_MS);
   return data.chat.slice(-CHAT_MAX_MESSAGES);
 }
+
 function recalcVotes(item) {
   const reactions = item.reactions && typeof item.reactions === 'object' ? item.reactions : {};
   let hearts = 0;
@@ -216,6 +242,7 @@ function recalcVotes(item) {
   item.dislikes = dislikes;
   return item;
 }
+
 function summarizeReport(report, myKey) {
   const clean = recalcVotes(Object.assign({}, report));
   return {
@@ -233,6 +260,7 @@ function summarizeReport(report, myKey) {
     targetUsername: String(clean.targetUsername || '')
   };
 }
+
 function summarizeSuggestionComment(comment, myKey) {
   const clean = recalcVotes(Object.assign({}, comment));
   return {
@@ -248,6 +276,7 @@ function summarizeSuggestionComment(comment, myKey) {
     replies: Array.isArray(clean.replies) ? clean.replies.map(r => summarizeSuggestionComment(r, myKey)) : []
   };
 }
+
 function summarizeSuggestion(suggestion, myKey) {
   const clean = recalcVotes(Object.assign({}, suggestion));
   return {
@@ -264,16 +293,7 @@ function summarizeSuggestion(suggestion, myKey) {
     comments: Array.isArray(clean.comments) ? clean.comments.map(c => summarizeSuggestionComment(c, myKey)) : []
   };
 }
-function defaultTeam() { return { teams: [] }; }
-function readTeams() {
-  const raw = readData().teams;
-  return { teams: Array.isArray(raw) ? raw : [] };
-}
-function writeTeams(state) {
-  const data = readData();
-  data.teams = Array.isArray(state && state.teams) ? state.teams : [];
-  writeData(data);
-}
+
 function createTeamMember(key, username, role, best, coins) {
   return {
     key: String(key || '').trim(),
@@ -284,6 +304,7 @@ function createTeamMember(key, username, role, best, coins) {
     joinedAt: Date.now()
   };
 }
+
 function summarizeTeam(team) {
   const members = Array.isArray(team.members) ? team.members : [];
   const totalBest = members.reduce((sum, m) => sum + (Number(m.best) || 0), 0);
@@ -300,9 +321,11 @@ function summarizeTeam(team) {
     updatedAt: Number(team.updatedAt || Date.now())
   };
 }
+
 function findTeamById(state, teamId) {
   return (state.teams || []).find((r) => String(r.id) === String(teamId)) || null;
 }
+
 function sanitizeTeamForCurrentUser(team, currentKey) {
   const isOwner = String(team.ownerKey || '') === String(currentKey || '');
   const base = summarizeTeam(team);
@@ -313,9 +336,13 @@ function sanitizeTeamForCurrentUser(team, currentKey) {
   base.bans = isOwner ? (team.bans || []).map(b => ({ key: b.key || '', username: b.username || 'Unknown', ts: Number(b.ts || Date.now()) })) : [];
   return base;
 }
-function clampTeamSize(n) { return Math.max(5, Math.min(10, Number(n) || 5)); }
+
+function clampTeamSize(n) {
+  return Math.max(5, Math.min(10, Number(n) || 5));
+}
+
 function resolveTeamIdForUser(key, username) {
-  const state = readTeams();
+  const state = { teams: readData().teams || [] };
   const k = String(key || '').trim();
   const u = sanitizeUsername(username) || '';
   for (const team of state.teams || []) {
@@ -327,6 +354,7 @@ function resolveTeamIdForUser(key, username) {
   }
   return '';
 }
+
 function isBannedFromTeam(team, key, username) {
   const k = String(key || '').trim();
   const u = sanitizeUsername(username) || '';
@@ -336,57 +364,26 @@ function isBannedFromTeam(team, key, username) {
     return (k && bk && k === bk) || (u && bu && u.toLowerCase() === bu.toLowerCase());
   });
 }
-function readEventData() {
-  const data = readData();
-  if (!data.events || !Array.isArray(data.events.featured)) data.events = defaultEvents();
-  return data.events;
+
+function defaultTeamWarsSnapshot() {
+  return currentSeason().id;
 }
+
 function getTeamLeaderboard() {
-  const state = readTeams();
+  const state = readData();
   return (state.teams || [])
     .map(team => summarizeTeam(team))
     .sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0) || (Number(b.totalCoins) || 0) - (Number(a.totalCoins) || 0))
     .slice(0, 10);
 }
-function weekStartMs_(ts) { return weekStartMs(ts); }
-function currentSeason_() { return currentSeason(); }
-function defaultEventState_() { return defaultEvents(); }
-function readEventState_() { return readEventData(); }
-function writeEventState_(state) { const data = readData(); data.events = state || defaultEvents(); writeData(data); }
-function defaultTeamWarState_() { return defaultTeamWars(); }
-function readTeamWars_() { const d = readData(); return d.teamWars || defaultTeamWars(); }
-function writeTeamWars_(state) { const data = readData(); data.teamWars = state || defaultTeamWars(); writeData(data); }
-function getTeamNameById(teamId) {
-  const state = readTeams();
-  const team = (state.teams || []).find((t) => String(t.id) === String(teamId));
-  return team ? String(team.name || 'Team') : 'Team';
-}
-function awardTeamWarPoints(teamId, points) {
-  const id = String(teamId || '').trim();
-  if (!id) return false;
-  const data = readData();
-  let state = data.teamWars || defaultTeamWars();
-  const season = currentSeason();
-  if (String(state.seasonId || '') !== String(season.id)) state = defaultTeamWars();
-  state.teams = Array.isArray(state.teams) ? state.teams : [];
-  let row = state.teams.find(t => String(t.teamId) === id);
-  if (!row) {
-    row = { teamId: id, teamName: getTeamNameById(id), points: 0, updatedAt: Date.now() };
-    state.teams.push(row);
-  }
-  row.teamName = getTeamNameById(id);
-  row.points = Math.max(0, Number(row.points || 0)) + Math.max(0, Number(points || 0));
-  row.updatedAt = Date.now();
-  data.teamWars = state;
-  writeData(data);
-  return true;
-}
+
 function getTeamWarsData() {
-  const state = readTeamWars_();
+  const data = readData();
   const season = currentSeason();
+  const state = data.teamWars || defaultTeamWars();
   if (String(state.seasonId || '') !== String(season.id)) {
-    const fresh = defaultTeamWarState_();
-    writeTeamWars_(fresh);
+    data.teamWars = defaultTeamWars();
+    writeData(data);
     return { season: currentSeason(), leaderboard: [] };
   }
   const leaderboard = (state.teams || [])
@@ -396,25 +393,127 @@ function getTeamWarsData() {
     .map((row, i) => ({
       rank: i + 1,
       teamId: row.teamId,
-      teamName: row.teamName || getTeamNameById(row.teamId),
+      teamName: row.teamName || 'Team',
       points: Number(row.points || 0),
       updatedAt: Number(row.updatedAt || Date.now())
     }));
-  return { season: { id: state.seasonId, startsAt: Number(state.startsAt || season.startsAt), endsAt: Number(state.endsAt || season.endsAt) }, leaderboard };
+  return {
+    season: { id: state.seasonId, startsAt: Number(state.startsAt || season.startsAt), endsAt: Number(state.endsAt || season.endsAt) },
+    leaderboard
+  };
 }
-function isAdmin() {
-  return String((reqSessionEmail && reqSessionEmail()) || '').toLowerCase() === String(ADMIN_EMAIL).toLowerCase();
+
+function awardTeamWarPoints(teamId, points) {
+  const id = String(teamId || '').trim();
+  if (!id) return false;
+  const data = readData();
+  const season = currentSeason();
+  let state = data.teamWars || defaultTeamWars();
+  if (String(state.seasonId || '') !== String(season.id)) state = defaultTeamWars();
+  state.teams = Array.isArray(state.teams) ? state.teams : [];
+  let row = state.teams.find(t => String(t.teamId) === id);
+  if (!row) {
+    row = { teamId: id, teamName: 'Team', points: 0, updatedAt: Date.now() };
+    state.teams.push(row);
+  }
+  const team = findTeamById({ teams: data.teams || [] }, id);
+  row.teamName = team ? String(team.name || 'Team') : 'Team';
+  row.points = Math.max(0, Number(row.points || 0)) + Math.max(0, Number(points || 0));
+  row.updatedAt = Date.now();
+  data.teamWars = state;
+  writeData(data);
+  return true;
 }
-function reqSessionEmail() {
-  return '';
+
+function isAdminRequest(req) {
+  const token = String(req.headers['x-admin-key'] || '').trim();
+  return token && token === String(process.env.ADMIN_KEY || '');
 }
 
 function getAccountSession(req) {
   const account = currentAccount(req);
   if (!account) return { ok: true, account: null, playerKey: '', moderator: false };
-  return { ok: true, account: publicAccount(account), playerKey: String(account.accountId), moderator: false };
+  return { ok: true, account: publicAccount(account), playerKey: String(account.accountId || ''), moderator: false };
 }
 
+function getGameDataForAccount(account) {
+  if (!account) {
+    return {
+      best: 0,
+      coins: 0,
+      inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 },
+      ownedSkins: ['classic'],
+      activeSkin: 'classic',
+      theme: 'day',
+      shieldCharges: 0,
+      username: '',
+      teamId: '',
+      eventClaims: [],
+      warBestRecorded: 0,
+      warCoinsRecorded: 0,
+      playerKey: '',
+      moderator: false
+    };
+  }
+  const data = publicAccount(account);
+  data.playerKey = String(account.accountId || '');
+  data.moderator = false;
+  return data;
+}
+
+function normalizeInventory(inventory) {
+  const src = inventory && typeof inventory === 'object' ? inventory : {};
+  return {
+    shield: Math.max(0, Number(src.shield) || 0),
+    magnet: Math.max(0, Number(src.magnet) || 0),
+    slowmo: Math.max(0, Number(src.slowmo) || 0),
+    burst: Math.max(0, Number(src.burst) || 0)
+  };
+}
+
+function normalizeSkins(skins) {
+  const list = Array.isArray(skins) && skins.length ? skins.slice() : ['classic'];
+  const seen = new Set();
+  const out = [];
+  for (const s of list) {
+    const id = String(s || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  if (!out.includes('classic')) out.unshift('classic');
+  return out;
+}
+
+function getReportData() {
+  const key = getSessionAccountId(reqLike());
+  const data = readData();
+  const reports = (data.reports || []).map(r => summarizeReport(r, key)).sort((a, b) => {
+    const cat = String(a.category || '').localeCompare(String(b.category || ''));
+    if (cat) return cat;
+    return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  });
+  return { categories: REPORT_CATEGORIES.slice(), reports };
+}
+
+function getSuggestionData() {
+  const key = getSessionAccountId(reqLike());
+  const data = readData();
+  const suggestions = (data.suggestions || [])
+    .map(suggestion => summarizeSuggestion(suggestion, key))
+    .sort((a, b) =>
+      String(a.category || '').localeCompare(String(b.category || '')) ||
+      ((Number(b.hearts) || 0) - (Number(b.dislikes) || 0)) - ((Number(a.hearts) || 0) - (Number(a.dislikes) || 0)) ||
+      (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+    );
+  return { categories: SUGGEST_CATEGORIES.slice(), suggestions };
+}
+
+function reqLike() {
+  return { headers: { cookie: '' } };
+}
+
+// Accounts
 app.get('/api/session', (req, res) => res.json(getAccountSession(req)));
 
 app.post('/api/register', (req, res) => {
@@ -426,8 +525,9 @@ app.post('/api/register', (req, res) => {
   const data = readData();
   if (findAccountByUsername(data, username)) return res.json({ ok: false, error: 'That username already exists.' });
 
+  const nextId = data.accounts.length ? Math.max(...data.accounts.map(a => Number(a.accountId) || 0)) + 1 : 1;
   const account = {
-    accountId: String(data.accounts.length ? Math.max(...data.accounts.map(a => Number(a.accountId) || 0)) + 1 : 1),
+    accountId: String(nextId),
     username,
     passHash: hashPassword(password),
     createdAt: Date.now(),
@@ -449,7 +549,7 @@ app.post('/api/register', (req, res) => {
 
   data.accounts.push(account);
   writeData(data);
-  setSessionAccountId(req, account.accountId);
+  setAuthCookie(res, account.accountId);
   res.json({ ok: true, message: 'Account created.', account: publicAccount(account) });
 });
 
@@ -467,12 +567,12 @@ app.post('/api/login', (req, res) => {
 
   account.lastLoginAt = Date.now();
   writeData(data);
-  setSessionAccountId(req, account.accountId);
+  setAuthCookie(res, account.accountId);
   res.json({ ok: true, message: 'Logged in.', account: publicAccount(account) });
 });
 
 app.post('/api/logout', (req, res) => {
-  clearSessionAccountId(req);
+  clearAuthCookie(res);
   res.json({ ok: true, message: 'Logged out.' });
 });
 
@@ -485,11 +585,10 @@ app.post('/api/delete-account', (req, res) => {
   const username = String(account.username || 'Guest').toLowerCase();
   const data = readData();
 
-  data.accounts = (data.accounts || []).filter(a => String(a.accountId) !== id);
-  data.leaderboard = (data.leaderboard || []).filter(r => String(r.key || '') !== id);
-
-  data.reports = (data.reports || []).filter(r => String(r.key || '') !== id);
-  data.suggestions = (data.suggestions || []).filter(s => String(s.key || '') !== id);
+  data.accounts = data.accounts.filter(a => String(a.accountId) !== id);
+  data.leaderboard = data.leaderboard.filter(r => String(r.key || '') !== id);
+  data.reports = data.reports.filter(r => String(r.key || '') !== id);
+  data.suggestions = data.suggestions.filter(s => String(s.key || '') !== id);
 
   data.teams = (data.teams || []).map(team => {
     const copy = Object.assign({}, team);
@@ -511,46 +610,28 @@ app.post('/api/delete-account', (req, res) => {
   }).filter(Boolean);
 
   writeData(data);
-  clearSessionAccountId(req);
+  clearAuthCookie(res);
   res.json({ ok: true, message: 'Account deleted.' });
 });
 
+// Game data
 app.get('/api/game-data', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) {
-    return res.json({
-      best: 0,
-      coins: 0,
-      inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 },
-      ownedSkins: ['classic'],
-      activeSkin: 'classic',
-      theme: 'day',
-      shieldCharges: 0,
-      username: '',
-      teamId: '',
-      eventClaims: [],
-      warBestRecorded: 0,
-      warCoinsRecorded: 0,
-      playerKey: '',
-      moderator: false
-    });
-  }
-  const data = publicAccount(account);
-  data.playerKey = String(account.accountId || '');
-  data.moderator = false;
-  res.json(data);
+  res.json(getGameDataForAccount(currentAccount(req)));
 });
 
-app.post('/api/game/save', (req, res) => {
+app.post(['/api/game/save', '/api/save', '/api/save-game', '/api/game-data/save'], (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
   const incoming = req.body || {};
+  const prevBest = Number(account.best || 0);
+  const prevCoins = Number(account.coins || 0);
+
   account.username = sanitizeUsername(incoming.username || account.username) || account.username;
   account.best = Math.max(Number(account.best || 0), Number(incoming.best || 0));
   account.coins = Math.max(0, Number(incoming.coins ?? account.coins) || 0);
-  account.inventory = incoming.inventory && typeof incoming.inventory === 'object' ? incoming.inventory : account.inventory;
-  account.ownedSkins = Array.isArray(incoming.ownedSkins) && incoming.ownedSkins.length ? incoming.ownedSkins : account.ownedSkins;
+  account.inventory = normalizeInventory(incoming.inventory || account.inventory);
+  account.ownedSkins = Array.isArray(incoming.ownedSkins) && incoming.ownedSkins.length ? normalizeSkins(incoming.ownedSkins) : account.ownedSkins;
   account.activeSkin = account.ownedSkins.includes(String(incoming.activeSkin || account.activeSkin)) ? String(incoming.activeSkin || account.activeSkin) : 'classic';
   account.theme = incoming.theme === 'night' ? 'night' : 'day';
   account.shieldCharges = Math.max(0, Number(incoming.shieldCharges ?? account.shieldCharges) || 0);
@@ -565,8 +646,7 @@ app.post('/api/game/save', (req, res) => {
   upsertLeaderboardRow(data, account.accountId, account.username, account.best, account.coins);
 
   if (String(account.teamId || '')) {
-    const teams = readTeams();
-    const team = findTeamById(teams, account.teamId);
+    const team = findTeamById({ teams: data.teams || [] }, account.teamId);
     if (team) {
       team.members = Array.isArray(team.members) ? team.members : [];
       const member = team.members.find(m => String(m.key || '') === String(account.accountId));
@@ -579,8 +659,8 @@ app.post('/api/game/save', (req, res) => {
         team.members.push(createTeamMember(account.accountId, account.username, 'member', account.best, account.coins));
       }
       team.updatedAt = Date.now();
-      writeTeams(teams);
-      awardTeamWarPoints(account.teamId, Math.max(0, Math.round((Number(incoming.bestDelta || 0) + Number(incoming.coinDelta || 0) / 10))));
+      const scoreDelta = Math.max(0, account.best - prevBest) + Math.floor(Math.max(0, account.coins - prevCoins) / 10);
+      if (scoreDelta > 0) awardTeamWarPoints(account.teamId, scoreDelta);
     }
   }
 
@@ -598,12 +678,18 @@ app.post('/api/game/save', (req, res) => {
 
 app.get('/api/leaderboards', (req, res) => {
   const data = readData();
-  const highscores = data.leaderboard.slice().sort((a, b) => (Number(b.best) || 0) - (Number(a.best) || 0)).slice(0, 10);
-  const coins = data.leaderboard.slice().sort((a, b) => (Number(b.coins) || 0) - (Number(a.coins) || 0)).slice(0, 10);
-  res.json({ highscores, coins });
+  res.json({
+    highscores: data.leaderboard.slice().sort((a, b) => (Number(b.best) || 0) - (Number(a.best) || 0)).slice(0, 10),
+    coins: data.leaderboard.slice().sort((a, b) => (Number(b.coins) || 0) - (Number(a.coins) || 0)).slice(0, 10)
+  });
 });
 
+// Chat
 app.get('/api/chat', (req, res) => {
+  const data = readData();
+  res.json({ messages: readChat(data) });
+});
+app.get('/api/chat/messages', (req, res) => {
   const data = readData();
   res.json({ messages: readChat(data) });
 });
@@ -621,6 +707,7 @@ app.post('/api/chat/send', (req, res) => {
   res.json({ ok: true, messages: data.chat });
 });
 
+// Reports
 app.get('/api/reports', (req, res) => {
   const data = readData();
   const myKey = getSessionAccountId(req);
@@ -629,12 +716,11 @@ app.get('/api/reports', (req, res) => {
     if (cat) return cat;
     return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   });
-  res.json({ categories: REPORT_CATEGORIES, reports });
+  res.json({ categories: REPORT_CATEGORIES.slice(), reports });
 });
 app.post('/api/reports/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-
   const categoryInput = String(req.body.category || '').trim().toLowerCase();
   const category = REPORT_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
   const title = sanitizeText(req.body.title, 48);
@@ -659,7 +745,7 @@ app.post('/api/reports/send', (req, res) => {
   });
   if (data.reports.length > REPORT_MAX) data.reports = data.reports.slice(-REPORT_MAX);
   writeData(data);
-  res.json({ ok: true, message: 'Report submitted.', data: { categories: REPORT_CATEGORIES, reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
+  res.json({ ok: true, message: 'Report submitted.', data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
 });
 app.post('/api/reports/vote', (req, res) => {
   const account = currentAccount(req);
@@ -676,9 +762,25 @@ app.post('/api/reports/vote', (req, res) => {
   if (report.reactions[key] === vote) delete report.reactions[key];
   else report.reactions[key] = vote;
   writeData(data);
-  res.json({ ok: true, data: { categories: REPORT_CATEGORIES, reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
+  res.json({ ok: true, data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
+});
+app.post('/api/reports/ban-target', (req, res) => {
+  if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
+  const data = readData();
+  const report = (data.reports || []).find(r => String(r.id) === String(req.body.reportId || ''));
+  if (!report) return res.json({ ok: false, error: 'Report not found.' });
+  if (String(report.category || '') !== 'Hacker') return res.json({ ok: false, error: 'Only Hacker reports can be used for bans.' });
+  if (!String(report.targetAccountId || '')) return res.json({ ok: false, error: 'No target account on this report.' });
+
+  const target = (data.accounts || []).find(a => String(a.accountId) === String(report.targetAccountId));
+  if (!target) return res.json({ ok: false, error: 'Account not found.' });
+  target.banned = true;
+  target.banReason = sanitizeText(report.title || report.details || 'Banned by moderator.', 180);
+  writeData(data);
+  res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
+// Suggestions
 app.get('/api/suggestions', (req, res) => {
   const data = readData();
   const myKey = getSessionAccountId(req);
@@ -687,12 +789,11 @@ app.get('/api/suggestions', (req, res) => {
     if (cat) return cat;
     return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   });
-  res.json({ categories: SUGGEST_CATEGORIES, suggestions });
+  res.json({ categories: SUGGEST_CATEGORIES.slice(), suggestions });
 });
 app.post('/api/suggestions/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-
   const categoryInput = String(req.body.category || '').trim().toLowerCase();
   const category = SUGGEST_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
   const title = sanitizeText(req.body.title, 48);
@@ -714,7 +815,7 @@ app.post('/api/suggestions/send', (req, res) => {
   });
   if (data.suggestions.length > SUGGEST_MAX) data.suggestions = data.suggestions.slice(-SUGGEST_MAX);
   writeData(data);
-  res.json({ ok: true, message: 'Suggestion submitted.', data: { categories: SUGGEST_CATEGORIES, suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({ ok: true, message: 'Suggestion submitted.', data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
 });
 app.post('/api/suggestions/vote', (req, res) => {
   const account = currentAccount(req);
@@ -731,8 +832,9 @@ app.post('/api/suggestions/vote', (req, res) => {
   if (suggestion.reactions[key] === vote) delete suggestion.reactions[key];
   else suggestion.reactions[key] = vote;
   writeData(data);
-  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES, suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
 });
+
 function findSuggestionComment(comments, commentId) {
   for (const comment of (comments || [])) {
     if (String(comment.id) === String(commentId)) return comment;
@@ -741,6 +843,7 @@ function findSuggestionComment(comments, commentId) {
   }
   return null;
 }
+
 app.post('/api/suggestions/comment', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -777,10 +880,11 @@ app.post('/api/suggestions/comment', (req, res) => {
   }
 
   writeData(data);
-  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES, suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
 });
 
-app.get('/api/teams', (req, res) => {
+// Teams
+function getTeamDataSnapshot(req) {
   const data = readData();
   const key = getSessionAccountId(req);
   const account = currentAccount(req);
@@ -808,23 +912,22 @@ app.get('/api/teams', (req, res) => {
   for (const team of state.teams || []) {
     for (const reqItem of team.requests || []) {
       if (String(reqItem.key || '') === key) {
-        requests.push({
-          id: team.id,
-          name: team.name,
-          ownerName: team.ownerName,
-          ts: Number(reqItem.ts || Date.now())
-        });
+        requests.push({ id: team.id, name: team.name, ownerName: team.ownerName, ts: Number(reqItem.ts || Date.now()) });
       }
     }
   }
 
-  res.json({
+  return {
     teams: (state.teams || []).map(summarizeTeam).sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0)),
     leaderboard: getTeamLeaderboard(),
     currentTeam: currentTeam ? sanitizeTeamForCurrentUser(currentTeam, key) : null,
     invites,
     requests
-  });
+  };
+}
+
+app.get(['/api/teams', '/api/team-data'], (req, res) => {
+  res.json(getTeamDataSnapshot(req));
 });
 
 app.post('/api/teams/create', (req, res) => {
@@ -840,7 +943,6 @@ app.post('/api/teams/create', (req, res) => {
   }
 
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
   if (resolveTeamIdForUser(key, username)) return res.json({ ok: false, error: 'Leave your current team before creating a new one.' });
 
   const team = {
@@ -856,31 +958,14 @@ app.post('/api/teams/create', (req, res) => {
     updatedAt: Date.now()
   };
 
-  state.teams.push(team);
-  data.teams = state.teams;
-  writeData(data);
+  data.teams = Array.isArray(data.teams) ? data.teams : [];
+  data.teams.push(team);
   account.teamId = team.id;
-  data.accounts = (data.accounts || []).map(a => String(a.accountId) === key ? account : a);
+  const idx = data.accounts.findIndex(a => String(a.accountId) === key);
+  if (idx >= 0) data.accounts[idx] = account;
   writeData(data);
   res.json({ ok: true, message: 'Team created.', team: sanitizeTeamForCurrentUser(team, key), data: getTeamDataSnapshot(req) });
 });
-
-function getTeamDataSnapshot(req) {
-  const data = readData();
-  const key = getSessionAccountId(req);
-  const account = currentAccount(req);
-  const username = sanitizeUsername(account && account.username) || 'Guest';
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const resolvedTeamId = resolveTeamIdForUser(key, username);
-  const currentTeam = resolvedTeamId ? findTeamById(state, resolvedTeamId) : null;
-  return {
-    teams: (state.teams || []).map(summarizeTeam).sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0)),
-    leaderboard: getTeamLeaderboard(),
-    currentTeam: currentTeam ? sanitizeTeamForCurrentUser(currentTeam, key) : null,
-    invites: [],
-    requests: []
-  };
-}
 
 app.post('/api/teams/join', (req, res) => {
   const account = currentAccount(req);
@@ -889,8 +974,7 @@ app.post('/api/teams/join', (req, res) => {
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   if (resolveTeamIdForUser(key, username)) return res.json({ ok: false, error: 'Leave your current team first.' });
   if (isBannedFromTeam(team, key, username)) return res.json({ ok: false, error: 'You are banned from this team.' });
@@ -900,24 +984,59 @@ app.post('/api/teams/join', (req, res) => {
   team.requests = Array.isArray(team.requests) ? team.requests : [];
   team.requests.push({ key, username, ts: Date.now() });
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: 'Join request sent.' });
 });
+
+app.post('/api/teams/respond', (req, res) => {
+  const account = currentAccount(req);
+  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
+  const teamId = String(req.body.teamId || '').trim();
+  const requesterKey = String(req.body.requesterKey || '').trim();
+  const approve = Boolean(req.body.approve);
+
+  const data = readData();
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
+  if (!team) return res.json({ ok: false, error: 'Team not found.' });
+  if (String(team.ownerKey || '') !== String(account.accountId || '')) return res.json({ ok: false, error: 'Only the owner can respond to requests.' });
+
+  const reqIdx = (team.requests || []).findIndex(r => String(r.key || '') === requesterKey);
+  if (reqIdx < 0) return res.json({ ok: false, error: 'Request not found.' });
+
+  const request = team.requests[reqIdx];
+  if (!approve) {
+    team.requests.splice(reqIdx, 1);
+    team.updatedAt = Date.now();
+    writeData(data);
+    return res.json({ ok: true, message: 'Request declined.' });
+  }
+
+  if (isBannedFromTeam(team, request.key, request.username)) return res.json({ ok: false, error: 'That player is banned.' });
+  if ((team.members || []).length >= clampTeamSize(team.maxPlayers)) return res.json({ ok: false, error: 'Team is full.' });
+
+  if (!team.members.some(m => String(m.key || '') === String(request.key || ''))) {
+    team.members.push(createTeamMember(request.key, request.username, 'member', 0, 0));
+  }
+  team.requests.splice(reqIdx, 1);
+  team.updatedAt = Date.now();
+  writeData(data);
+  res.json({ ok: true, message: `${request.username || 'Player'} joined the team.` });
+});
+
 app.post('/api/teams/leave', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
   const key = String(account.accountId || '');
   const username = sanitizeUsername(account.username) || 'Guest';
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
   const teamId = resolveTeamIdForUser(key, username);
   if (!teamId) return res.json({ ok: false, error: 'You are not in a team.' });
 
-  let team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
-  team.members = (team.members || []).filter(m => String(m.key || '') !== key && String(m.username || '').toLowerCase() !== username.toLowerCase());
 
+  team.members = (team.members || []).filter(m => String(m.key || '') !== key && String(m.username || '').toLowerCase() !== username.toLowerCase());
   if (String(team.ownerKey || '') === key) {
     if (team.members.length) {
       const nextOwner = team.members[0];
@@ -925,10 +1044,10 @@ app.post('/api/teams/leave', (req, res) => {
       team.ownerKey = nextOwner.key;
       team.ownerName = nextOwner.username;
     } else {
-      state.teams = state.teams.filter(t => String(t.id) !== String(teamId));
+      data.teams = (data.teams || []).filter(t => String(t.id) !== String(teamId));
       account.teamId = '';
-      data.accounts = (data.accounts || []).map(a => String(a.accountId) === key ? account : a);
-      data.teams = state.teams;
+      const idx = data.accounts.findIndex(a => String(a.accountId) === key);
+      if (idx >= 0) data.accounts[idx] = account;
       writeData(data);
       return res.json({ ok: true, message: 'Team deleted.' });
     }
@@ -936,11 +1055,12 @@ app.post('/api/teams/leave', (req, res) => {
 
   team.updatedAt = Date.now();
   account.teamId = '';
-  data.accounts = (data.accounts || []).map(a => String(a.accountId) === key ? account : a);
-  data.teams = state.teams;
+  const idx = data.accounts.findIndex(a => String(a.accountId) === key);
+  if (idx >= 0) data.accounts[idx] = account;
   writeData(data);
   res.json({ ok: true, message: 'Left team.' });
 });
+
 app.post('/api/teams/invite', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -950,11 +1070,10 @@ app.post('/api/teams/invite', (req, res) => {
   if (!target) return res.json({ ok: false, error: 'Enter a valid username.' });
 
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
   const teamId = resolveTeamIdForUser(key, inviter);
   if (!teamId) return res.json({ ok: false, error: 'You are not in a team.' });
 
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team || String(team.ownerKey || '') !== key) return res.json({ ok: false, error: 'Only the owner can invite players.' });
   if (isBannedFromTeam(team, '', target)) return res.json({ ok: false, error: 'That username is banned.' });
   if ((team.members || []).some(m => sanitizeUsername(m.username) === target)) return res.json({ ok: false, error: 'That player is already in the team.' });
@@ -963,10 +1082,10 @@ app.post('/api/teams/invite', (req, res) => {
   team.invites = Array.isArray(team.invites) ? team.invites : [];
   team.invites.push({ username: target, key: '', ts: Date.now() });
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: `Invite sent to ${target}.` });
 });
+
 app.post('/api/teams/accept', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -974,8 +1093,7 @@ app.post('/api/teams/accept', (req, res) => {
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   if (resolveTeamIdForUser(key, username) && resolveTeamIdForUser(key, username) !== teamId) return res.json({ ok: false, error: 'Leave your current team first.' });
 
@@ -989,26 +1107,26 @@ app.post('/api/teams/accept', (req, res) => {
   team.invites.splice(inviteIdx, 1);
   team.updatedAt = Date.now();
   account.teamId = teamId;
-  data.accounts = (data.accounts || []).map(a => String(a.accountId) === key ? account : a);
-  data.teams = state.teams;
+  const idx = data.accounts.findIndex(a => String(a.accountId) === key);
+  if (idx >= 0) data.accounts[idx] = account;
   writeData(data);
   res.json({ ok: true, message: 'Invite accepted.' });
 });
+
 app.post('/api/teams/decline', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   team.invites = (team.invites || []).filter(i => sanitizeUsername(i.username) !== username);
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: 'Invite declined.' });
 });
+
 app.post('/api/teams/kick', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -1017,17 +1135,16 @@ app.post('/api/teams/kick', (req, res) => {
   const targetKey = String(req.body.targetKey || '').trim();
   const targetUsername = sanitizeUsername(req.body.targetUsername) || '';
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   if (String(team.ownerKey || '') !== key) return res.json({ ok: false, error: 'Only the owner can kick members.' });
 
   team.members = (team.members || []).filter(m => !(String(m.key || '') === targetKey || sanitizeUsername(m.username) === targetUsername));
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: 'Member removed.' });
 });
+
 app.post('/api/teams/ban', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -1036,8 +1153,7 @@ app.post('/api/teams/ban', (req, res) => {
   const targetKey = String(req.body.targetKey || '').trim();
   const targetUsername = sanitizeUsername(req.body.targetUsername) || '';
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   if (String(team.ownerKey || '') !== key) return res.json({ ok: false, error: 'Only the owner can ban members.' });
 
@@ -1049,10 +1165,10 @@ app.post('/api/teams/ban', (req, res) => {
   team.requests = (team.requests || []).filter(r => !(String(r.key || '') === targetKey || sanitizeUsername(r.username) === targetUsername));
   team.invites = (team.invites || []).filter(i => !(String(i.key || '') === targetKey || sanitizeUsername(i.username) === targetUsername));
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: 'Member banned.' });
 });
+
 app.post('/api/teams/unban', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -1060,53 +1176,51 @@ app.post('/api/teams/unban', (req, res) => {
   const teamId = String(req.body.teamId || '').trim();
   const target = String(req.body.target || '').trim();
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
+  const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
   if (String(team.ownerKey || '') !== key) return res.json({ ok: false, error: 'Only the owner can unban members.' });
 
   const before = (team.bans || []).length;
   team.bans = (team.bans || []).filter(b => String(b.key || '') !== target && sanitizeUsername(b.username) !== target);
   team.updatedAt = Date.now();
-  data.teams = state.teams;
   writeData(data);
   res.json({ ok: true, message: before !== (team.bans || []).length ? 'Member unbanned.' : 'Nothing to unban.' });
 });
 
+// Events and team wars
 app.get('/api/events', (req, res) => {
   const data = readData();
   res.json({ events: data.events || defaultEvents() });
 });
-
-app.get('/api/team-wars', (req, res) => {
-  res.json(getTeamWarsData());
+app.get('/api/event-data', (req, res) => {
+  const data = readData();
+  res.json({ events: data.events || defaultEvents() });
 });
+app.get('/api/team-wars', (req, res) => res.json(getTeamWarsData()));
+app.get('/api/team-wars/data', (req, res) => res.json(getTeamWarsData()));
 
-
-app.post('/api/username', (req, res) => {
+app.post('/api/events/claim', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-
-  const clean = sanitizeUsername(req.body.username);
-  if (!clean) return res.json({ ok: false, error: 'Invalid username.' });
-
+  const eventId = String(req.body.eventId || '').trim();
   const data = readData();
-  const clash = (data.accounts || []).find(a => String(a.accountId) !== String(account.accountId) && String(a.username || '').toLowerCase() === clean.toLowerCase());
-  if (clash) return res.json({ ok: false, error: 'That username is already taken.' });
+  const event = (data.events.featured || []).find(e => String(e.id) === eventId);
+  if (!event) return res.json({ ok: false, error: 'Event not found.' });
+  const claims = Array.isArray(account.eventClaims) ? account.eventClaims : [];
+  if (claims.includes(eventId)) return res.json({ ok: false, error: 'Reward already claimed.' });
 
-  account.username = clean;
-  const idx = (data.accounts || []).findIndex(a => String(a.accountId) === String(account.accountId));
+  account.coins = Math.max(0, Number(account.coins || 0)) + Math.max(0, Number(event.rewardCoins || 0));
+  account.eventClaims = claims.concat(eventId);
+  const idx = data.accounts.findIndex(a => String(a.accountId) === String(account.accountId));
   if (idx >= 0) data.accounts[idx] = account;
+  upsertLeaderboardRow(data, account.accountId, account.username, account.best, account.coins);
   writeData(data);
-  res.json({ ok: true, username: clean, account: publicAccount(account) });
+  res.json({ ok: true, message: `Claimed ${Number(event.rewardCoins || 0)} coins.`, data: publicAccount(account), events: { events: data.events.featured || [] } });
 });
 
+// Moderation
 app.get('/api/moderation/accounts', (req, res) => {
-  const account = currentAccount(req);
-  if (!account || !isAdmin()) {
-    return res.json({ ok: false, error: 'Not authorized.' });
-  }
-
+  if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const data = readData();
   res.json({
     ok: true,
@@ -1122,69 +1236,33 @@ app.get('/api/moderation/accounts', (req, res) => {
 });
 
 app.post('/api/moderation/ban-account', (req, res) => {
-  const account = currentAccount(req);
-  if (!account || !isAdmin()) {
-    return res.json({ ok: false, error: 'Not authorized.' });
-  }
-
+  if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const targetId = String(req.body.accountId || '').trim();
   const reason = sanitizeText(req.body.reason || 'Banned by moderator.', 180);
   if (!targetId) return res.json({ ok: false, error: 'Missing account id.' });
-
   const data = readData();
   const target = (data.accounts || []).find(a => String(a.accountId) === targetId);
   if (!target) return res.json({ ok: false, error: 'Account not found.' });
-
   target.banned = true;
   target.banReason = reason || 'Banned by moderator.';
   writeData(data);
   res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
-app.post('/api/teams/respond', (req, res) => {
+// Misc helpers
+app.post('/api/username', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-
-  const teamId = String(req.body.teamId || '').trim();
-  const requesterKey = String(req.body.requesterKey || '').trim();
-  const approve = Boolean(req.body.approve);
-
+  const clean = sanitizeUsername(req.body.username);
+  if (!clean) return res.json({ ok: false, error: 'Invalid username.' });
   const data = readData();
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const team = findTeamById(state, teamId);
-  if (!team) return res.json({ ok: false, error: 'Team not found.' });
-  if (String(team.ownerKey || '') !== String(account.accountId || '')) {
-    return res.json({ ok: false, error: 'Only the owner can respond to requests.' });
-  }
-
-  const reqIdx = (team.requests || []).findIndex(r => String(r.key || '') === requesterKey);
-  if (reqIdx < 0) return res.json({ ok: false, error: 'Request not found.' });
-
-  const request = team.requests[reqIdx];
-  if (!approve) {
-    team.requests.splice(reqIdx, 1);
-    team.updatedAt = Date.now();
-    data.teams = state.teams;
-    writeData(data);
-    return res.json({ ok: true, message: 'Request declined.' });
-  }
-
-  if (isBannedFromTeam(team, request.key, request.username)) {
-    return res.json({ ok: false, error: 'That player is banned.' });
-  }
-  if ((team.members || []).length >= clampTeamSize(team.maxPlayers)) {
-    return res.json({ ok: false, error: 'Team is full.' });
-  }
-
-  if (!team.members.some(m => String(m.key || '') === String(request.key || ''))) {
-    team.members.push(createTeamMember(request.key, request.username, 'member', 0, 0));
-  }
-
-  team.requests.splice(reqIdx, 1);
-  team.updatedAt = Date.now();
-  data.teams = state.teams;
+  const clash = (data.accounts || []).find(a => String(a.accountId) !== String(account.accountId) && String(a.username || '').toLowerCase() === clean.toLowerCase());
+  if (clash) return res.json({ ok: false, error: 'That username is already taken.' });
+  account.username = clean;
+  const idx = (data.accounts || []).findIndex(a => String(a.accountId) === String(account.accountId));
+  if (idx >= 0) data.accounts[idx] = account;
   writeData(data);
-  res.json({ ok: true, message: `${request.username || 'Player'} joined the team.` });
+  res.json({ ok: true, username: clean, account: publicAccount(account) });
 });
 
 app.get('/api/refresh', (req, res) => {
@@ -1283,7 +1361,6 @@ io.on('connection', (socket) => {
       skin: String(payload.skin || 'classic'),
       alive: payload.alive !== false
     };
-
     multiplayerState.set(socket.id, player);
     socket.emit('current-players', Array.from(multiplayerState.values()).filter(p => p.id !== socket.id));
     socket.broadcast.emit('player-joined', player);
@@ -1302,7 +1379,6 @@ io.on('connection', (socket) => {
       skin: String(payload.skin || existing.skin || 'classic'),
       alive: payload.alive !== false
     };
-
     multiplayerState.set(socket.id, player);
     socket.broadcast.emit('player-state', player);
   });
@@ -1312,7 +1388,6 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('player-disconnected', socket.id);
   });
 });
-
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
