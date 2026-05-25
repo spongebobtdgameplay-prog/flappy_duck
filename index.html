@@ -1,615 +1,1298 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Flappy Duck</title>
-
 <style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:Arial,Helvetica,sans-serif;
-}
-
-body{
-    background:#0f172a;
-    color:white;
-    overflow:hidden;
-}
-
-#gameCanvas{
-    position:fixed;
-    inset:0;
-    width:100vw;
-    height:100vh;
-    background:linear-gradient(to bottom,#0ea5e9,#1e293b);
-}
-
-#mainMenu{
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    width:420px;
-    background:rgba(15,23,42,.96);
-    border:2px solid #38bdf8;
-    border-radius:20px;
-    padding:24px;
-    display:flex;
-    flex-direction:column;
-    gap:14px;
-    box-shadow:0 0 40px rgba(56,189,248,.4);
-}
-
-.title{
-    font-size:42px;
-    font-weight:900;
-    text-align:center;
-    color:#38bdf8;
-    text-shadow:0 0 20px #38bdf8;
-}
-
-button{
-    border:none;
-    border-radius:14px;
-    padding:16px;
-    font-size:18px;
-    font-weight:700;
-    cursor:pointer;
-    transition:.15s;
-    background:#1e293b;
-    color:white;
-}
-
-button:hover{
-    transform:scale(1.03);
-    background:#334155;
-}
-
-.primary{
-    background:#0ea5e9;
-}
-
-.primary:hover{
-    background:#38bdf8;
-}
-
-.panel{
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    width:520px;
-    max-height:80vh;
-    overflow-y:auto;
-    background:#111827;
-    border:2px solid #38bdf8;
-    border-radius:18px;
-    padding:20px;
-    display:none;
-    flex-direction:column;
-    gap:12px;
-}
-
-.panel h2{
-    text-align:center;
-    color:#38bdf8;
-}
-
-.closeButton{
-    background:#ef4444;
-}
-
-input,textarea,select{
-    width:100%;
-    padding:14px;
-    border-radius:12px;
-    border:none;
-    background:#1e293b;
-    color:white;
-    font-size:16px;
-}
-
-textarea{
-    min-height:120px;
-    resize:none;
-}
-
-.card{
-    background:#1e293b;
-    border-radius:14px;
-    padding:14px;
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-}
-
-.small{
-    opacity:.7;
-    font-size:13px;
-}
-
-.voteRow{
-    display:flex;
-    gap:10px;
-}
-
-.topBar{
-    position:absolute;
-    top:10px;
-    left:10px;
-    right:10px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    z-index:100;
-}
-
-.stats{
-    background:rgba(15,23,42,.9);
-    padding:12px 18px;
-    border-radius:14px;
-    border:1px solid #38bdf8;
-    display:flex;
-    gap:18px;
-    font-weight:700;
-}
-
-.settingsButton{
-    width:60px;
-    height:60px;
-    border-radius:50%;
-    font-size:28px;
-}
-
-.hidden{
-    display:none;
-}
+  :root{
+    --bg1:#0ea5e9;
+    --bg2:#1e293b;
+    --panel:rgba(15,23,42,.96);
+    --panel2:#111827;
+    --line:#38bdf8;
+    --text:#fff;
+    --muted:rgba(255,255,255,.72);
+    --accent:#fbbf24;
+    --good:#4ade80;
+    --danger:#ef4444;
+    --shadow:0 0 40px rgba(56,189,248,.25);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,Helvetica,sans-serif;background:#000;color:var(--text)}
+  body[data-theme="day"]{background:linear-gradient(var(--bg1), #cffafe)}
+  body[data-theme="night"]{background:linear-gradient(#081126, #1d4ed8)}
+  #gameCanvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  .topbar{
+    position:absolute;left:10px;right:10px;top:10px;z-index:20;
+    display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;
+    pointer-events:none
+  }
+  .stats,.buttons{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
+  .stat{
+    background:rgba(15,23,42,.88);padding:10px 14px;border-radius:14px;border:1px solid var(--line);
+    font-weight:700
+  }
+  button{
+    border:none;border-radius:14px;padding:12px 14px;font-size:15px;font-weight:800;cursor:pointer;
+    background:#1e293b;color:#fff;transition:.15s
+  }
+  button:hover{transform:translateY(-1px);background:#334155}
+  .primary{background:#0ea5e9}
+  .primary:hover{background:#38bdf8}
+  .good{background:#16a34a}
+  .danger{background:var(--danger)}
+  .overlay{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;
+    width:min(92vw,560px);background:rgba(15,23,42,.92);border:2px solid var(--line);border-radius:22px;
+    box-shadow:var(--shadow);padding:24px;display:flex;flex-direction:column;gap:14px
+  }
+  .title{font-size:42px;font-weight:900;text-align:center;color:var(--line);text-shadow:0 0 20px var(--line)}
+  .sub{color:var(--muted);text-align:center}
+  .panel{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
+    background:rgba(0,0,0,.54);backdrop-filter:blur(10px);padding:14px
+  }
+  .panel.open{display:flex}
+  .sheet{
+    width:min(1100px,96vw);max-height:90vh;overflow:auto;border-radius:24px;background:var(--panel2);
+    border:1px solid rgba(255,255,255,.1);box-shadow:var(--shadow);padding:18px
+  }
+  .sheet h2,.sheet h3{margin:0 0 10px}
+  .sheet-head{display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:14px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06)
+  }
+  .list{display:grid;gap:10px}
+  .row{
+    display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:12px
+  }
+  .row .meta{color:var(--muted);font-size:13px}
+  .small{color:var(--muted);font-size:13px;line-height:1.35}
+  input,textarea,select{
+    width:100%;border:none;border-radius:12px;padding:12px 14px;font:inherit;color:#fff;
+    background:rgba(255,255,255,.08);outline:none;border:1px solid rgba(255,255,255,.12)
+  }
+  textarea{resize:vertical;min-height:100px}
+  .tinybtn{padding:8px 10px;border-radius:999px;font-size:13px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);font-size:12px}
+  .hidden{display:none!important}
+  .toast{
+    position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:40;
+    background:rgba(15,23,42,.96);border:1px solid rgba(255,255,255,.12);padding:10px 14px;border-radius:999px;
+    box-shadow:var(--shadow);opacity:0;transition:.2s;pointer-events:none;max-width:min(92vw,700px)
+  }
+  .toast.show{opacity:1}
+  .comment{margin-left:12px;border-left:3px solid rgba(251,191,36,.28);padding-left:10px}
+  @media (max-width:900px){ .grid2{grid-template-columns:1fr} }
 </style>
 </head>
+<body data-theme="day">
+  <canvas id="gameCanvas"></canvas>
 
-<body>
-
-<canvas id="gameCanvas"></canvas>
-
-<div class="topBar">
+  <div class="topbar">
     <div class="stats">
-        <div>Score: <span id="scoreText">0</span></div>
-        <div>Best: <span id="bestText">0</span></div>
-        <div>Coins: <span id="coinsText">0</span></div>
+      <div class="stat">NAME: <span id="nameText">Guest</span></div>
+      <div class="stat">BEST: <span id="bestText">0</span></div>
+      <div class="stat">SCORE: <span id="scoreText">0</span></div>
+      <div class="stat">COINS: <span id="coinsText">0</span></div>
     </div>
+    <div class="buttons">
+      <button id="settingsBtn">Settings</button>
+      <button id="leaderBtn">Leaderboard</button>
+      <button id="chatBtn">Chat</button>
+      <button id="teamBtn">Teams</button>
+      <button id="eventsBtn">Events</button>
+      <button id="reportBtn">Reports</button>
+      <button id="suggestBtn">Suggestions</button>
+      <button id="shopBtn" class="primary">Shop</button>
+      <button id="themeBtn">Night Mode</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="refreshBtn">Refresh</button>
+      <button id="restartBtn">Restart</button>
+    </div>
+  </div>
 
-    <button class="settingsButton" onclick="openPanel('settingsPanel')">
-        ⚙
-    </button>
-</div>
-
-<div id="mainMenu">
+  <div id="overlay" class="overlay">
     <div class="title">FLAPPY DUCK</div>
+    <div class="sub">Tap, click, or press Space to flap.</div>
+    <div class="chips">
+      <div class="chip">Coins save to account</div>
+      <div class="chip">Login lives in Settings</div>
+      <div class="chip">No multiplayer button</div>
+    </div>
+    <div class="buttons" style="justify-content:center">
+      <button id="playBtn" class="primary">PLAY</button>
+    </div>
+  </div>
 
-    <button class="primary" onclick="startGame()">
-        PLAY
-    </button>
+  <div id="shopPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Shop</h2>
+          <div class="small">Skins stay owned. Boosts are consumed when used.</div>
+        </div>
+        <button data-close="shopPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Skins</h3>
+          <div id="skinList" class="list"></div>
+        </div>
+        <div class="card">
+          <h3>Boosts</h3>
+          <div id="boostList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <button onclick="openPanel('leaderboardPanel')">
-        LEADERBOARDS
-    </button>
+  <div id="leaderPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Leaderboards</h2>
+          <div class="small">Best score and coins.</div>
+        </div>
+        <button data-close="leaderPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Top Scores</h3>
+          <div id="scoreBoard" class="list"></div>
+        </div>
+        <div class="card">
+          <h3>Top Coins</h3>
+          <div id="coinBoard" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <button onclick="openPanel('suggestionPanel')">
-        SUGGESTIONS
-    </button>
+  <div id="chatPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Chat</h2>
+          <div class="small">Global room chat.</div>
+        </div>
+        <button data-close="chatPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div id="chatList" class="list"></div>
+        </div>
+        <div class="card">
+          <h3>Send a message</h3>
+          <input id="chatInput" maxlength="120" placeholder="Say something..." />
+          <div style="height:10px"></div>
+          <div class="buttons" style="justify-content:flex-end">
+            <button id="sendChatBtn" class="primary">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <button onclick="openPanel('reportPanel')">
-        REPORTS
-    </button>
+  <div id="teamPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Teams</h2>
+          <div class="small">Create a team, join one, or leave your current team.</div>
+        </div>
+        <button data-close="teamPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>My Team</h3>
+          <div id="myTeamBox" class="list"></div>
+          <div style="height:12px"></div>
+          <h3>Create Team</h3>
+          <input id="teamNameInput" maxlength="24" placeholder="Duck Squad" />
+          <div style="height:8px"></div>
+          <input id="teamMaxInput" type="number" min="5" max="10" value="5" />
+          <div style="height:10px"></div>
+          <div class="buttons" style="justify-content:flex-end">
+            <button id="createTeamBtn" class="primary">Create</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>All Teams</h3>
+          <div id="teamList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <button onclick="openPanel('teamPanel')">
-        TEAMS
-    </button>
-</div>
+  <div id="eventsPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Events</h2>
+          <div class="small">Stored on the server.</div>
+        </div>
+        <button data-close="eventsPanel">Close</button>
+      </div>
+      <div id="eventsList" class="list"></div>
+    </div>
+  </div>
 
-<div id="settingsPanel" class="panel">
-    <h2>SETTINGS</h2>
+  <div id="reportPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Reports</h2>
+          <div class="small">Report hackers, bugs, cheats, or anything else.</div>
+        </div>
+        <button data-close="reportPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Submit report</h3>
+          <select id="reportCategory">
+            <option>Hacker</option><option>Bug</option><option>Cheat</option><option>Other</option>
+          </select>
+          <div style="height:8px"></div>
+          <input id="reportTitle" maxlength="48" placeholder="Short title" />
+          <div style="height:8px"></div>
+          <textarea id="reportDetails" maxlength="240" placeholder="Explain the problem..."></textarea>
+          <div style="height:10px"></div>
+          <div class="buttons" style="justify-content:flex-end">
+            <button id="submitReportBtn" class="primary">Submit</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Reports</h3>
+          <div id="reportList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <input id="usernameInput" placeholder="Username">
+  <div id="suggestPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Suggestions</h2>
+          <div class="small">Vote and comment on ideas.</div>
+        </div>
+        <button data-close="suggestPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Add suggestion</h3>
+          <select id="suggestCategory">
+            <option>Gameplay</option><option>Shop</option><option>Teams</option><option>UI</option><option>Multiplayer</option><option>Other</option>
+          </select>
+          <div style="height:8px"></div>
+          <input id="suggestTitle" maxlength="48" placeholder="Short title" />
+          <div style="height:8px"></div>
+          <textarea id="suggestDetails" maxlength="240" placeholder="Explain the idea..."></textarea>
+          <div style="height:10px"></div>
+          <div class="buttons" style="justify-content:flex-end">
+            <button id="submitSuggestBtn" class="primary">Submit</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Suggestions</h3>
+          <div id="suggestList" class="list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <input id="passwordInput" type="password" placeholder="Password">
+  <div id="settingsPanel" class="panel">
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h2>Settings</h2>
+          <div class="small">Account tools live here.</div>
+        </div>
+        <button data-close="settingsPanel">Close</button>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Account</h3>
+          <input id="accountUser" maxlength="16" placeholder="Username" />
+          <div style="height:8px"></div>
+          <input id="accountPass" type="password" maxlength="32" placeholder="Password" />
+          <div id="accountError" class="small" style="color:#fca5a5;margin-top:8px;min-height:18px"></div>
+          <div class="buttons" style="justify-content:flex-end;margin-top:12px">
+            <button id="createAccountBtn" class="primary">Create Account</button>
+            <button id="loginAccountBtn">Login</button>
+            <button id="logoutAccountBtn">Logout</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Account data</h3>
+          <div class="small">Delete only after typing DELETE.</div>
+          <div style="height:10px"></div>
+          <button id="deleteAccountBtn" class="danger">Delete Account</button>
+          <div id="deleteBox" class="hidden" style="margin-top:10px">
+            <input id="deleteConfirm" placeholder="Type DELETE" />
+            <div style="height:10px"></div>
+            <div class="buttons">
+              <button id="confirmDeleteBtn" class="danger">Yes, delete</button>
+              <button id="cancelDeleteBtn">No</button>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div id="accountStatus" class="small"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <button onclick="login()">
-        LOGIN
-    </button>
-
-    <button onclick="createAccount()">
-        CREATE ACCOUNT
-    </button>
-
-    <button onclick="logout()">
-        LOGOUT
-    </button>
-
-    <button class="closeButton" onclick="closePanels()">
-        CLOSE
-    </button>
-</div>
-
-<div id="leaderboardPanel" class="panel">
-    <h2>LEADERBOARDS</h2>
-
-    <div id="leaderboardList"></div>
-
-    <button class="closeButton" onclick="closePanels()">
-        CLOSE
-    </button>
-</div>
-
-<div id="reportPanel" class="panel">
-    <h2>REPORT PLAYER</h2>
-
-    <select id="reportCategory">
-        <option>Hacker</option>
-        <option>Bug</option>
-        <option>Cheat</option>
-        <option>Other</option>
-    </select>
-
-    <input id="reportTitle" placeholder="Title">
-
-    <textarea id="reportDetails" placeholder="Details"></textarea>
-
-    <button onclick="submitReport()">
-        SUBMIT REPORT
-    </button>
-
-    <div id="reportList"></div>
-
-    <button class="closeButton" onclick="closePanels()">
-        CLOSE
-    </button>
-</div>
-
-<div id="suggestionPanel" class="panel">
-    <h2>SUGGESTIONS</h2>
-
-    <select id="suggestionCategory">
-        <option>Gameplay</option>
-        <option>Shop</option>
-        <option>Teams</option>
-        <option>UI</option>
-        <option>Multiplayer</option>
-        <option>Other</option>
-    </select>
-
-    <input id="suggestionTitle" placeholder="Title">
-
-    <textarea id="suggestionDetails" placeholder="Suggestion"></textarea>
-
-    <button onclick="submitSuggestion()">
-        SUBMIT SUGGESTION
-    </button>
-
-    <div id="suggestionList"></div>
-
-    <button class="closeButton" onclick="closePanels()">
-        CLOSE
-    </button>
-</div>
-
-<div id="teamPanel" class="panel">
-    <h2>TEAMS</h2>
-
-    <input id="teamName" placeholder="Team Name">
-
-    <button onclick="createTeam()">
-        CREATE TEAM
-    </button>
-
-    <div id="teamList"></div>
-
-    <button class="closeButton" onclick="closePanels()">
-        CLOSE
-    </button>
-</div>
+  <div id="toast" class="toast"></div>
 
 <script>
-const canvas = document.getElementById("gameCanvas")
-const ctx = canvas.getContext("2d")
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
+const API = {
+  session: '/api/session',
+  gameData: '/api/game-data',
+  save: '/api/game/save',
+  register: '/api/register',
+  login: '/api/login',
+  logout: '/api/logout',
+  deleteAccount: '/api/delete-account',
+  leaderboards: '/api/leaderboards',
+  chat: '/api/chat',
+  sendChat: '/api/chat/send',
+  reports: '/api/reports',
+  sendReport: '/api/reports/send',
+  voteReport: '/api/reports/vote',
+  suggestions: '/api/suggestions',
+  sendSuggestion: '/api/suggestions/send',
+  voteSuggestion: '/api/suggestions/vote',
+  commentSuggestion: '/api/suggestions/comment',
+  events: '/api/events',
+  teams: '/api/teams',
+  createTeam: '/api/teams/create',
+  joinTeam: '/api/teams/join',
+  leaveTeam: '/api/teams/leave',
+  inviteTeam: '/api/teams/invite',
+  respondTeam: '/api/teams/respond'
+};
 
-let birdY = 300
-let velocity = 0
-let gravity = 0.55
-let flapPower = -9
-let score = 0
-let best = Number(localStorage.getItem("bestScore") || 0)
-let coins = Number(localStorage.getItem("coins") || 0)
-let pipes = []
-let playing = false
+const els = {
+  overlay: document.getElementById('overlay'),
+  playBtn: document.getElementById('playBtn'),
+  nameText: document.getElementById('nameText'),
+  bestText: document.getElementById('bestText'),
+  scoreText: document.getElementById('scoreText'),
+  coinsText: document.getElementById('coinsText'),
+  themeBtn: document.getElementById('themeBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  restartBtn: document.getElementById('restartBtn'),
+  refreshBtn: document.getElementById('refreshBtn'),
+  settingsBtn: document.getElementById('settingsBtn'),
+  leaderBtn: document.getElementById('leaderBtn'),
+  chatBtn: document.getElementById('chatBtn'),
+  teamBtn: document.getElementById('teamBtn'),
+  eventsBtn: document.getElementById('eventsBtn'),
+  reportBtn: document.getElementById('reportBtn'),
+  suggestBtn: document.getElementById('suggestBtn'),
+  shopBtn: document.getElementById('shopBtn'),
+  shopPanel: document.getElementById('shopPanel'),
+  leaderPanel: document.getElementById('leaderPanel'),
+  chatPanel: document.getElementById('chatPanel'),
+  teamPanel: document.getElementById('teamPanel'),
+  eventsPanel: document.getElementById('eventsPanel'),
+  reportPanel: document.getElementById('reportPanel'),
+  suggestPanel: document.getElementById('suggestPanel'),
+  settingsPanel: document.getElementById('settingsPanel'),
+  skinList: document.getElementById('skinList'),
+  boostList: document.getElementById('boostList'),
+  scoreBoard: document.getElementById('scoreBoard'),
+  coinBoard: document.getElementById('coinBoard'),
+  chatList: document.getElementById('chatList'),
+  chatInput: document.getElementById('chatInput'),
+  sendChatBtn: document.getElementById('sendChatBtn'),
+  myTeamBox: document.getElementById('myTeamBox'),
+  teamList: document.getElementById('teamList'),
+  teamNameInput: document.getElementById('teamNameInput'),
+  teamMaxInput: document.getElementById('teamMaxInput'),
+  createTeamBtn: document.getElementById('createTeamBtn'),
+  eventsList: document.getElementById('eventsList'),
+  reportList: document.getElementById('reportList'),
+  reportCategory: document.getElementById('reportCategory'),
+  reportTitle: document.getElementById('reportTitle'),
+  reportDetails: document.getElementById('reportDetails'),
+  submitReportBtn: document.getElementById('submitReportBtn'),
+  suggestList: document.getElementById('suggestList'),
+  suggestCategory: document.getElementById('suggestCategory'),
+  suggestTitle: document.getElementById('suggestTitle'),
+  suggestDetails: document.getElementById('suggestDetails'),
+  submitSuggestBtn: document.getElementById('submitSuggestBtn'),
+  accountUser: document.getElementById('accountUser'),
+  accountPass: document.getElementById('accountPass'),
+  accountError: document.getElementById('accountError'),
+  accountStatus: document.getElementById('accountStatus'),
+  createAccountBtn: document.getElementById('createAccountBtn'),
+  loginAccountBtn: document.getElementById('loginAccountBtn'),
+  logoutAccountBtn: document.getElementById('logoutAccountBtn'),
+  deleteAccountBtn: document.getElementById('deleteAccountBtn'),
+  deleteBox: document.getElementById('deleteBox'),
+  deleteConfirm: document.getElementById('deleteConfirm'),
+  confirmDeleteBtn: document.getElementById('confirmDeleteBtn'),
+  cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
+  toast: document.getElementById('toast')
+};
 
-document.getElementById("bestText").textContent = best
-document.getElementById("coinsText").textContent = coins
+const SKINS = [
+  { id: 'classic', name: 'Classic Duck', cost: 0, emoji: '🦆', desc: 'Default duck.' },
+  { id: 'gold', name: 'Gold Duck', cost: 30, emoji: '✨', desc: 'Shiny and expensive.' },
+  { id: 'neon', name: 'Neon Duck', cost: 18, emoji: '🌈', desc: 'Bright colors.' },
+  { id: 'shadow', name: 'Shadow Duck', cost: 45, emoji: '🖤', desc: 'Dark and sleek.' },
+  { id: 'lava', name: 'Lava Duck', cost: 55, emoji: '🔥', desc: 'Hot streak certified.' }
+];
+const BOOSTS = [
+  { id: 'shield', name: 'Shield', cost: 22, emoji: '🛡️', desc: 'Survive one crash.' },
+  { id: 'magnet', name: 'Coin Magnet', cost: 20, emoji: '🧲', desc: 'Pull coins to you for a run.' },
+  { id: 'slowmo', name: 'Slow Time', cost: 16, emoji: '⏱️', desc: 'Calmer pipe speed.' },
+  { id: 'burst', name: 'Coin Burst', cost: 28, emoji: '💰', desc: 'Instant bonus coins.' }
+];
 
-function resetGame(){
-    birdY = 300
-    velocity = 0
-    score = 0
-    pipes = []
+const GROUND_H = 92;
+const DUNGEON = { gravity: 1800, flapV: -560, startSpeed: 210, speedGrowth: 7, maxSpeed: 360 };
+const STORAGE_KEY = 'flappy_duck_local_save_v1';
+
+const state = {
+  account: null,
+  playerKey: '',
+  serverReady: false,
+  playing: false,
+  paused: false,
+  score: 0,
+  best: 0,
+  coins: 0,
+  username: 'Guest',
+  inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 },
+  ownedSkins: new Set(['classic']),
+  activeSkin: 'classic',
+  theme: 'day',
+  shieldCharges: 0,
+  teamId: '',
+  eventClaims: [],
+  reports: [],
+  suggestions: [],
+  chat: [],
+  teams: [],
+  events: [],
+  leaderboard: { highscores: [], coins: [] },
+  saving: false,
+  loading: false,
+  birdY: 250,
+  velocity: 0,
+  pipes: [],
+  pipeSpeed: DUNGEON.startSpeed,
+  spawnTimer: 0,
+  magnetTimer: 0,
+  slowmoTimer: 0,
+  shieldFlash: 0,
+  lastFrame: performance.now()
+};
+
+function toast(msg) {
+  els.toast.textContent = msg;
+  els.toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => els.toast.classList.remove('show'), 1800);
 }
 
-function startGame(){
-    resetGame()
-    playing = true
-    document.getElementById("mainMenu").style.display = "none"
+function openPanel(el) { el.classList.add('open'); }
+function closePanel(el) { el.classList.remove('open'); }
+function closeAllPanels() {
+  [els.shopPanel, els.leaderPanel, els.chatPanel, els.teamPanel, els.eventsPanel, els.reportPanel, els.suggestPanel, els.settingsPanel].forEach(closePanel);
 }
 
-function flap(){
-    if(!playing) return
-    velocity = flapPower
+async function api(url, options = {}) {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  return await res.json();
 }
 
-window.addEventListener("keydown",e=>{
-    if(e.code === "Space"){
-        flap()
-    }
-})
-
-window.addEventListener("mousedown",()=>{
-    flap()
-})
-
-function spawnPipe(){
-    const gap = 220
-    const topHeight = Math.random() * 350 + 60
-
-    pipes.push({
-        x: canvas.width,
-        top: topHeight,
-        bottom: topHeight + gap,
-        scored:false
-    })
+function safeInt(v, min = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(min, Math.floor(n)) : min;
 }
 
-setInterval(()=>{
-    if(playing){
-        spawnPipe()
-    }
-},1800)
+function setStats() {
+  els.nameText.textContent = state.username || 'Guest';
+  els.bestText.textContent = String(state.best || 0);
+  els.scoreText.textContent = String(state.score || 0);
+  els.coinsText.textContent = String(state.coins || 0);
+  els.themeBtn.textContent = state.theme === 'night' ? 'Day Mode' : 'Night Mode';
+  document.body.dataset.theme = state.theme;
+}
 
-function update(){
-    requestAnimationFrame(update)
+function loadLocalGuest() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    state.best = safeInt(data.best, 0);
+    state.coins = safeInt(data.coins, 0);
+    state.username = String(data.username || 'Guest');
+    state.inventory = Object.assign({ shield: 0, magnet: 0, slowmo: 0, burst: 0 }, data.inventory || {});
+    state.ownedSkins = new Set(Array.isArray(data.ownedSkins) && data.ownedSkins.length ? data.ownedSkins : ['classic']);
+    state.activeSkin = state.ownedSkins.has(data.activeSkin) ? data.activeSkin : 'classic';
+    state.theme = data.theme === 'night' ? 'night' : 'day';
+    state.shieldCharges = safeInt(data.shieldCharges, 0);
+    state.teamId = String(data.teamId || '');
+    state.eventClaims = Array.isArray(data.eventClaims) ? data.eventClaims : [];
+  } catch {}
+}
 
-    ctx.clearRect(0,0,canvas.width,canvas.height)
+function saveLocalGuest() {
+  const data = {
+    best: state.best,
+    coins: state.coins,
+    username: state.username,
+    inventory: state.inventory,
+    ownedSkins: Array.from(state.ownedSkins),
+    activeSkin: state.activeSkin,
+    theme: state.theme,
+    shieldCharges: state.shieldCharges,
+    teamId: state.teamId,
+    eventClaims: state.eventClaims
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
 
-    if(playing){
-        velocity += gravity
-        birdY += velocity
+function syncFromAccount(account) {
+  state.account = account || null;
+  if (account) {
+    state.username = account.username || 'Guest';
+    state.best = safeInt(account.best, 0);
+    state.coins = safeInt(account.coins, 0);
+    state.inventory = Object.assign({ shield: 0, magnet: 0, slowmo: 0, burst: 0 }, account.inventory || {});
+    state.ownedSkins = new Set(Array.isArray(account.ownedSkins) && account.ownedSkins.length ? account.ownedSkins : ['classic']);
+    state.activeSkin = state.ownedSkins.has(account.activeSkin) ? account.activeSkin : 'classic';
+    state.theme = account.theme === 'night' ? 'night' : 'day';
+    state.shieldCharges = safeInt(account.shieldCharges, 0);
+    state.teamId = String(account.teamId || '');
+    state.eventClaims = Array.isArray(account.eventClaims) ? account.eventClaims : [];
+    state.playerKey = String(account.accountId || '');
+  } else {
+    state.playerKey = '';
+    loadLocalGuest();
+  }
+  setStats();
+  renderShop();
+  renderTeams();
+  renderReports();
+  renderSuggestions();
+}
 
-        ctx.fillStyle = "#facc15"
-        ctx.beginPath()
-        ctx.arc(180,birdY,24,0,Math.PI*2)
-        ctx.fill()
+async function loadSession() {
+  const session = await api(API.session);
+  syncFromAccount(session.account || null);
+  state.serverReady = true;
+  await Promise.all([refreshLeaderboards(), loadChat(), loadReports(), loadSuggestions(), loadTeams(), loadEvents()]);
+}
 
-        for(let i = pipes.length - 1; i >= 0; i--){
-            const pipe = pipes[i]
-            pipe.x -= 5
+async function loadGameData() {
+  const data = await api(API.gameData);
+  if (data && data.playerKey) {
+    syncFromAccount(data);
+  } else {
+    loadLocalGuest();
+    setStats();
+  }
+}
 
-            ctx.fillStyle = "#22c55e"
-            ctx.fillRect(pipe.x,0,90,pipe.top)
+async function refreshAll() {
+  await Promise.all([refreshLeaderboards(), loadChat(), loadReports(), loadSuggestions(), loadTeams(), loadEvents()]);
+  toast('Refreshed.');
+}
 
-            ctx.fillRect(
-                pipe.x,
-                pipe.bottom,
-                90,
-                canvas.height - pipe.bottom
-            )
+function renderShop() {
+  els.skinList.innerHTML = '';
+  els.boostList.innerHTML = '';
 
-            if(
-                180 + 24 > pipe.x &&
-                180 - 24 < pipe.x + 90 &&
-                (
-                    birdY - 24 < pipe.top ||
-                    birdY + 24 > pipe.bottom
-                )
-            ){
-                endGame()
-            }
+  for (const skin of SKINS) {
+    const owned = state.ownedSkins.has(skin.id);
+    const active = state.activeSkin === skin.id;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div>
+        <div><strong>${skin.emoji} ${skin.name}</strong></div>
+        <div class="meta">${skin.desc}</div>
+      </div>
+      <div class="buttons">
+        <button class="tinybtn ${active ? 'good' : owned ? '' : 'primary'}">${active ? 'Equipped' : owned ? 'Equip' : `Buy ${skin.cost}`}</button>
+      </div>`;
+    row.querySelector('button').onclick = async () => {
+      if (owned) {
+        state.activeSkin = skin.id;
+        saveProgress('Equipped skin.');
+      } else if (state.coins >= skin.cost) {
+        state.coins -= skin.cost;
+        state.ownedSkins.add(skin.id);
+        state.activeSkin = skin.id;
+        saveProgress('Skin unlocked.');
+      } else toast('Not enough coins.');
+      setStats();
+      renderShop();
+    };
+    els.skinList.appendChild(row);
+  }
 
-            if(pipe.x + 90 < 180 && !pipe.scored){
-                pipe.scored = true
-                score++
-                coins++
+  for (const boost of BOOSTS) {
+    const count = state.inventory[boost.id] || 0;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div>
+        <div><strong>${boost.emoji} ${boost.name}</strong></div>
+        <div class="meta">${boost.desc} · In stock: ${count}</div>
+      </div>
+      <div class="buttons">
+        <button class="tinybtn primary">Buy ${boost.cost}</button>
+        <button class="tinybtn ${count > 0 ? 'good' : ''}" ${count > 0 ? '' : 'disabled'}>${count > 0 ? 'Use' : 'Empty'}</button>
+      </div>`;
+    const buttons = row.querySelectorAll('button');
+    buttons[0].onclick = () => {
+      if (state.coins < boost.cost) return toast('Not enough coins.');
+      state.coins -= boost.cost;
+      state.inventory[boost.id] = (state.inventory[boost.id] || 0) + 1;
+      setStats();
+      saveProgress(`${boost.name} added.`);
+      renderShop();
+    };
+    buttons[1].onclick = () => useBoost(boost.id);
+    els.boostList.appendChild(row);
+  }
+}
 
-                document.getElementById("scoreText").textContent = score
-                document.getElementById("coinsText").textContent = coins
+function podiumSlot(entry, rank, label, key) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div><strong>#${rank} ${entry ? entry.username : '—'}</strong><div class="meta">${label}: ${entry ? entry[key] : 0}</div></div><div></div>`;
+  return row;
+}
 
-                localStorage.setItem("coins",coins)
-            }
+async function refreshLeaderboards() {
+  const data = await api(API.leaderboards);
+  state.leaderboard = data || { highscores: [], coins: [] };
+  els.scoreBoard.innerHTML = '';
+  els.coinBoard.innerHTML = '';
+  (state.leaderboard.highscores || []).slice(0, 10).forEach((r, i) => els.scoreBoard.appendChild(podiumSlot(r, i + 1, 'Best', 'best')));
+  (state.leaderboard.coins || []).slice(0, 10).forEach((r, i) => els.coinBoard.appendChild(podiumSlot(r, i + 1, 'Coins', 'coins')));
+}
 
-            if(pipe.x < -100){
-                pipes.splice(i,1)
-            }
+function renderMessages(list, container, makeRow) {
+  container.innerHTML = '';
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'small';
+    empty.textContent = 'Nothing here yet.';
+    container.appendChild(empty);
+    return;
+  }
+  list.forEach(item => container.appendChild(makeRow(item)));
+}
+
+function chatRow(msg) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div><strong>${msg.username || 'Guest'}</strong><div class="small">${msg.text || ''}</div><div class="meta">${new Date(msg.ts || Date.now()).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}</div></div><div></div>`;
+  return row;
+}
+
+async function loadChat() {
+  const data = await api(API.chat);
+  state.chat = data.messages || [];
+  renderMessages(state.chat, els.chatList, chatRow);
+}
+
+async function sendChat() {
+  const message = String(els.chatInput.value || '').trim();
+  if (!message) return;
+  const res = await api(API.sendChat, { method: 'POST', body: JSON.stringify({ message }) });
+  if (!res.ok) return toast(res.error || 'Chat failed.');
+  els.chatInput.value = '';
+  await loadChat();
+}
+
+function reportRow(r) {
+  const row = document.createElement('div');
+  row.className = 'card';
+  row.innerHTML = `
+    <div><strong>${r.title || 'Report'}</strong></div>
+    <div class="small">${r.details || ''}</div>
+    <div class="meta">${r.category} · by ${r.username} · ❤️ ${r.hearts} · 👎 ${r.dislikes}</div>
+    <div class="buttons">
+      <button class="tinybtn">❤️</button>
+      <button class="tinybtn">👎</button>
+    </div>`;
+  const [heart, dislike] = row.querySelectorAll('button');
+  heart.onclick = () => voteReport(r.id, 'heart');
+  dislike.onclick = () => voteReport(r.id, 'dislike');
+  return row;
+}
+
+async function loadReports() {
+  const data = await api(API.reports);
+  state.reports = data.reports || [];
+  renderMessages(state.reports, els.reportList, reportRow);
+}
+
+async function submitReport() {
+  const payload = {
+    category: els.reportCategory.value,
+    title: String(els.reportTitle.value || '').trim(),
+    details: String(els.reportDetails.value || '').trim()
+  };
+  const res = await api(API.sendReport, { method: 'POST', body: JSON.stringify(payload) });
+  if (!res.ok) return toast(res.error || 'Report failed.');
+  els.reportTitle.value = '';
+  els.reportDetails.value = '';
+  state.reports = res.reports || [];
+  renderMessages(state.reports, els.reportList, reportRow);
+  toast('Report sent.');
+}
+
+async function voteReport(reportId, reaction) {
+  const res = await api(API.voteReport, { method: 'POST', body: JSON.stringify({ reportId, reaction }) });
+  if (!res.ok) return toast(res.error || 'Vote failed.');
+  state.reports = res.reports || [];
+  renderMessages(state.reports, els.reportList, reportRow);
+}
+
+function commentNode(comment, suggestionId, level = 0) {
+  const wrap = document.createElement('div');
+  wrap.className = level ? 'comment' : '';
+  wrap.innerHTML = `
+    <div class="small"><strong>${comment.username || 'Guest'}</strong> · ❤️ ${comment.hearts || 0} · 👎 ${comment.dislikes || 0}</div>
+    <div>${comment.text || ''}</div>
+  `;
+  return wrap;
+}
+
+function suggestionRow(s) {
+  const row = document.createElement('div');
+  row.className = 'card';
+  row.innerHTML = `
+    <div><strong>${s.title || 'Suggestion'}</strong></div>
+    <div class="small">${s.details || ''}</div>
+    <div class="meta">${s.category} · by ${s.username} · ❤️ ${s.hearts} · 👎 ${s.dislikes}</div>
+    <div class="buttons">
+      <button class="tinybtn">❤️</button>
+      <button class="tinybtn">👎</button>
+      <button class="tinybtn">Comment</button>
+    </div>
+    <div class="commentBox hidden" style="margin-top:10px">
+      <textarea maxlength="240" placeholder="Write a comment..."></textarea>
+      <div style="height:8px"></div>
+      <div class="buttons" style="justify-content:flex-end">
+        <button class="tinybtn primary">Post</button>
+      </div>
+      <div class="comments"></div>
+    </div>`;
+  const buttons = row.querySelectorAll('.buttons button');
+  const [heart, dislike, commentBtn] = buttons;
+  heart.onclick = () => voteSuggestion(s.id, 'heart');
+  dislike.onclick = () => voteSuggestion(s.id, 'dislike');
+  const box = row.querySelector('.commentBox');
+  const textarea = row.querySelector('textarea');
+  const postBtn = row.querySelector('.commentBox .primary');
+  const comments = row.querySelector('.comments');
+  commentBtn.onclick = () => box.classList.toggle('hidden');
+  postBtn.onclick = () => postSuggestionComment(s.id, textarea.value, comments, textarea);
+  comments.innerHTML = '';
+  (s.comments || []).forEach(c => comments.appendChild(commentNode(c, s.id)));
+  return row;
+}
+
+async function loadSuggestions() {
+  const data = await api(API.suggestions);
+  state.suggestions = data.suggestions || [];
+  renderMessages(state.suggestions, els.suggestList, suggestionRow);
+}
+
+async function submitSuggestion() {
+  const payload = {
+    category: els.suggestCategory.value,
+    title: String(els.suggestTitle.value || '').trim(),
+    details: String(els.suggestDetails.value || '').trim()
+  };
+  const res = await api(API.sendSuggestion, { method: 'POST', body: JSON.stringify(payload) });
+  if (!res.ok) return toast(res.error || 'Suggestion failed.');
+  els.suggestTitle.value = '';
+  els.suggestDetails.value = '';
+  state.suggestions = res.suggestions || [];
+  renderMessages(state.suggestions, els.suggestList, suggestionRow);
+  toast('Suggestion added.');
+}
+
+async function voteSuggestion(suggestionId, reaction) {
+  const res = await api(API.voteSuggestion, { method: 'POST', body: JSON.stringify({ suggestionId, reaction }) });
+  if (!res.ok) return toast(res.error || 'Vote failed.');
+  state.suggestions = res.suggestions || [];
+  renderMessages(state.suggestions, els.suggestList, suggestionRow);
+}
+
+async function postSuggestionComment(suggestionId, text, commentsEl, textarea) {
+  text = String(text || '').trim();
+  if (!text) return toast('Write a comment first.');
+  const res = await api(API.commentSuggestion, { method: 'POST', body: JSON.stringify({ suggestionId, text }) });
+  if (!res.ok) return toast(res.error || 'Comment failed.');
+  state.suggestions = res.suggestions || [];
+  renderMessages(state.suggestions, els.suggestList, suggestionRow);
+  toast('Comment added.');
+}
+
+function teamRow(team) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const inTeam = state.teamId && String(team.id) === String(state.teamId);
+  row.innerHTML = `
+    <div>
+      <strong>${team.name || 'Team'}</strong>
+      <div class="meta">${team.memberCount || 0}/${team.maxPlayers || 5} members · score ${team.score || 0}</div>
+    </div>
+    <div class="buttons">
+      <button class="tinybtn ${inTeam ? 'good' : 'primary'}">${inTeam ? 'Joined' : 'Join'}</button>
+    </div>`;
+  row.querySelector('button').onclick = () => inTeam ? leaveTeam() : joinTeam(team.id);
+  return row;
+}
+
+function myTeamRow() {
+  const box = els.myTeamBox;
+  box.innerHTML = '';
+  const team = state.teams.find(t => String(t.id) === String(state.teamId));
+  if (!team) {
+    const empty = document.createElement('div');
+    empty.className = 'small';
+    empty.textContent = 'You are not on a team.';
+    box.appendChild(empty);
+    return;
+  }
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div><strong>${team.name}</strong></div>
+    <div class="small">${team.memberCount}/${team.maxPlayers} members · owner: ${team.ownerId === state.playerKey ? 'you' : team.ownerId}</div>
+    <div class="buttons">
+      <button class="tinybtn danger">Leave</button>
+    </div>`;
+  card.querySelector('button').onclick = leaveTeam;
+  box.appendChild(card);
+}
+
+async function loadTeams() {
+  const data = await api(API.teams);
+  state.teams = data.teams || [];
+  renderTeams();
+}
+
+function renderTeams() {
+  myTeamRow();
+  renderMessages(state.teams, els.teamList, teamRow);
+}
+
+async function createTeam() {
+  const res = await api(API.createTeam, { method: 'POST', body: JSON.stringify({
+    name: String(els.teamNameInput.value || '').trim(),
+    maxPlayers: Number(els.teamMaxInput.value || 5)
+  }) });
+  if (!res.ok) return toast(res.error || 'Create team failed.');
+  els.teamNameInput.value = '';
+  state.teams = res.teams || [];
+  state.teamId = res.currentTeam ? String(res.currentTeam.id) : state.teamId;
+  renderTeams();
+  toast('Team created.');
+}
+
+async function joinTeam(teamId) {
+  const res = await api(API.joinTeam, { method: 'POST', body: JSON.stringify({ teamId }) });
+  if (!res.ok) return toast(res.error || 'Join failed.');
+  state.teams = res.teams || [];
+  state.teamId = res.team ? String(res.team.id) : state.teamId;
+  renderTeams();
+  saveProgress();
+  toast('Joined team.');
+}
+
+async function leaveTeam() {
+  const res = await api(API.leaveTeam, { method: 'POST', body: JSON.stringify({}) });
+  if (!res.ok) return toast(res.error || 'Leave failed.');
+  state.teams = res.teams || [];
+  state.teamId = '';
+  renderTeams();
+  saveProgress();
+  toast('Left team.');
+}
+
+function eventRow(e) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <div>
+      <strong>${e.title || 'Event'}</strong>
+      <div class="small">${e.details || ''}</div>
+    </div>
+    <div class="meta">${e.reward || ''}</div>`;
+  return row;
+}
+
+async function loadEvents() {
+  const data = await api(API.events);
+  state.events = data.events || [];
+  renderMessages(state.events, els.eventsList, eventRow);
+}
+
+async function loginOrRegister(mode) {
+  const username = String(els.accountUser.value || '').trim();
+  const password = String(els.accountPass.value || '').trim();
+  els.accountError.textContent = '';
+  const url = mode === 'register' ? API.register : API.login;
+  const res = await api(url, { method: 'POST', body: JSON.stringify({ username, password }) });
+  if (!res.ok) {
+    els.accountError.textContent = res.error || 'Account action failed.';
+    return;
+  }
+  syncFromAccount(res.account);
+  await refreshAll();
+  closePanel(els.settingsPanel);
+  toast(res.message || 'Done.');
+  saveProgress();
+}
+
+async function logoutAccount() {
+  const res = await api(API.logout, { method: 'POST', body: JSON.stringify({}) });
+  if (!res.ok) return toast(res.error || 'Logout failed.');
+  state.account = null;
+  state.playerKey = '';
+  syncFromAccount(null);
+  await refreshAll();
+  toast('Logged out.');
+}
+
+function showDeleteBox() {
+  els.deleteConfirm.value = '';
+  els.deleteBox.classList.remove('hidden');
+}
+
+function hideDeleteBox() {
+  els.deleteBox.classList.add('hidden');
+}
+
+async function deleteAccount() {
+  const confirmText = String(els.deleteConfirm.value || '').trim();
+  const res = await api(API.deleteAccount, { method: 'POST', body: JSON.stringify({ confirmText }) });
+  if (!res.ok) return toast(res.error || 'Delete failed.');
+  state.account = null;
+  state.playerKey = '';
+  syncFromAccount(null);
+  hideDeleteBox();
+  closePanel(els.settingsPanel);
+  toast('Account deleted.');
+}
+
+function formatMs(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
+}
+
+function saveProgress(message = '') {
+  setStats();
+  if (state.account) {
+    clearTimeout(saveProgress._t);
+    saveProgress._t = setTimeout(async () => {
+      if (state.saving) return;
+      state.saving = true;
+      try {
+        const payload = {
+          best: state.best,
+          coins: state.coins,
+          inventory: state.inventory,
+          ownedSkins: Array.from(state.ownedSkins),
+          activeSkin: state.activeSkin,
+          theme: state.theme,
+          shieldCharges: state.shieldCharges,
+          username: state.username,
+          teamId: state.teamId,
+          eventClaims: state.eventClaims
+        };
+        const res = await api(API.save, { method: 'POST', body: JSON.stringify(payload) });
+        if (res && res.data) syncFromAccount(res.data);
+        if (res && res.leaderboards) {
+          state.leaderboard = res.leaderboards;
+          await refreshLeaderboards();
         }
+      } finally {
+        state.saving = false;
+      }
+    }, 150);
+  } else {
+    saveLocalGuest();
+  }
+  if (message) toast(message);
+}
 
-        if(birdY > canvas.height || birdY < -40){
-            endGame()
-        }
+function resetGame() {
+  state.score = 0;
+  state.birdY = canvas.height * 0.4;
+  state.velocity = 0;
+  state.pipes = [];
+  state.pipeSpeed = DUNGEON.startSpeed;
+  state.spawnTimer = 0;
+  state.magnetTimer = 0;
+  state.slowmoTimer = 0;
+  state.shieldFlash = 0;
+  state.playing = true;
+  state.paused = false;
+  els.overlay.classList.add('hidden');
+  setStats();
+}
+
+function endGame() {
+  state.playing = false;
+  if (state.score > state.best) state.best = state.score;
+  saveProgress();
+  els.overlay.classList.remove('hidden');
+  toast('Run over.');
+}
+
+function flap() {
+  if (!state.playing || state.paused) return;
+  state.velocity = DUNGEON.flapV;
+}
+
+function useBoost(id) {
+  const count = state.inventory[id] || 0;
+  if (!count) return toast('No stock.');
+  state.inventory[id] = count - 1;
+  if (id === 'shield') {
+    state.shieldCharges += 1;
+    toast('Shield added.');
+  }
+  if (id === 'magnet') {
+    state.magnetTimer = 8;
+    toast('Magnet active.');
+  }
+  if (id === 'slowmo') {
+    state.slowmoTimer = 8;
+    toast('Slow time active.');
+  }
+  if (id === 'burst') {
+    state.coins += 15;
+    toast('Coin burst!');
+  }
+  setStats();
+  renderShop();
+  saveProgress();
+}
+
+function spawnPipe() {
+  const gap = 220;
+  const topHeight = Math.random() * 320 + 70;
+  state.pipes.push({
+    x: canvas.width + 50,
+    top: topHeight,
+    bottom: topHeight + gap,
+    scored: false
+  });
+}
+
+function drawBird() {
+  const x = 180;
+  const y = state.birdY;
+  const r = 24;
+  ctx.fillStyle = '#facc15';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111827';
+  ctx.beginPath();
+  ctx.arc(x + 8, y - 6, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPipes() {
+  for (let i = state.pipes.length - 1; i >= 0; i--) {
+    const p = state.pipes[i];
+    p.x -= state.pipeSpeed * (state.slowmoTimer > 0 ? 0.5 : 1);
+
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(p.x, 0, 90, p.top);
+    ctx.fillRect(p.x, p.bottom, 90, canvas.height - p.bottom - GROUND_H);
+
+    const birdX = 180, birdR = 24;
+    const hit = birdX + birdR > p.x && birdX - birdR < p.x + 90 && (state.birdY - birdR < p.top || state.birdY + birdR > p.bottom);
+    if (hit) {
+      if (state.shieldCharges > 0) {
+        state.shieldCharges -= 1;
+        state.shieldFlash = 0.25;
+        p.x += 120;
+        toast('Shield saved you.');
+      } else {
+        endGame();
+        return;
+      }
     }
-}
 
-function endGame(){
-    playing = false
-
-    if(score > best){
-        best = score
-        localStorage.setItem("bestScore",best)
+    if (p.x + 90 < birdX && !p.scored) {
+      p.scored = true;
+      state.score += 1;
+      state.coins += 1;
+      if (Math.random() < 0.25) state.coins += 1;
+      setStats();
+      saveProgress();
     }
 
-    document.getElementById("bestText").textContent = best
-    document.getElementById("mainMenu").style.display = "flex"
+    if (p.x < -120) state.pipes.splice(i, 1);
+  }
 }
 
-update()
-
-function closePanels(){
-    document.querySelectorAll(".panel").forEach(panel=>{
-        panel.style.display = "none"
-    })
+function drawGround() {
+  ctx.fillStyle = '#78350f';
+  ctx.fillRect(0, canvas.height - GROUND_H, canvas.width, GROUND_H);
+  ctx.fillStyle = '#14532d';
+  ctx.fillRect(0, canvas.height - GROUND_H, canvas.width, 12);
 }
 
-function openPanel(id){
-    closePanels()
-    document.getElementById(id).style.display = "flex"
+function loop(t) {
+  const dt = Math.min(0.05, (t - state.lastFrame) / 1000);
+  state.lastFrame = t;
+  requestAnimationFrame(loop);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (state.playing && !state.paused) {
+    state.velocity += DUNGEON.gravity * dt;
+    state.birdY += state.velocity * dt;
+    state.spawnTimer += dt;
+    state.pipeSpeed = Math.min(DUNGEON.maxSpeed, state.pipeSpeed + DUNGEON.speedGrowth * dt);
+
+    if (state.slowmoTimer > 0) state.slowmoTimer = Math.max(0, state.slowmoTimer - dt);
+    if (state.magnetTimer > 0) state.magnetTimer = Math.max(0, state.magnetTimer - dt);
+    if (state.shieldFlash > 0) state.shieldFlash = Math.max(0, state.shieldFlash - dt);
+
+    if (state.spawnTimer > 1.8) {
+      state.spawnTimer = 0;
+      spawnPipe();
+    }
+
+    drawPipes();
+
+    if (!state.playing) return;
+    if (state.birdY > canvas.height - GROUND_H - 20 || state.birdY < -40) {
+      if (state.shieldCharges > 0) {
+        state.shieldCharges -= 1;
+        state.birdY = Math.max(60, Math.min(canvas.height - GROUND_H - 60, state.birdY));
+        state.velocity = -250;
+        toast('Shield saved you.');
+      } else {
+        endGame();
+        return;
+      }
+    }
+  }
+
+  drawGround();
+  drawBird();
+
+  if (!state.playing) {
+    ctx.fillStyle = 'rgba(0,0,0,.12)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+  setStats();
 }
 
-async function createAccount(){
-    const username = document.getElementById("usernameInput").value
-    const password = document.getElementById("passwordInput").value
-
-    const result = await runServerFunction("createAccount",{
-        username,
-        password
-    })
-
-    alert(result.message || result.error)
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  if (!state.playing) state.birdY = canvas.height * 0.4;
 }
+window.addEventListener('resize', resize);
 
-async function login(){
-    const username = document.getElementById("usernameInput").value
-    const password = document.getElementById("passwordInput").value
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); flap(); }
+  if (e.key === 'Escape') closeAllPanels();
+});
+window.addEventListener('mousedown', flap);
+window.addEventListener('touchstart', (e) => {
+  if (e.target.closest('.panel') || e.target.closest('.topbar')) return;
+  flap();
+}, { passive: true });
 
-    const result = await runServerFunction("loginAccount",{
-        username,
-        password
-    })
+els.playBtn.onclick = resetGame;
+els.themeBtn.onclick = () => {
+  state.theme = state.theme === 'night' ? 'day' : 'night';
+  setStats();
+  saveProgress();
+};
+els.pauseBtn.onclick = () => {
+  state.paused = !state.paused;
+  els.pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+};
+els.restartBtn.onclick = resetGame;
+els.refreshBtn.onclick = refreshAll;
+els.settingsBtn.onclick = () => openPanel(els.settingsPanel);
+els.leaderBtn.onclick = () => { openPanel(els.leaderPanel); refreshLeaderboards(); };
+els.chatBtn.onclick = () => { openPanel(els.chatPanel); loadChat(); };
+els.teamBtn.onclick = () => { openPanel(els.teamPanel); loadTeams(); };
+els.eventsBtn.onclick = () => { openPanel(els.eventsPanel); loadEvents(); };
+els.reportBtn.onclick = () => { openPanel(els.reportPanel); loadReports(); };
+els.suggestBtn.onclick = () => { openPanel(els.suggestPanel); loadSuggestions(); };
+els.shopBtn.onclick = () => openPanel(els.shopPanel);
 
-    alert(result.message || result.error)
-}
+document.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => closePanel(document.getElementById(btn.dataset.close)));
+els.sendChatBtn.onclick = sendChat;
+els.chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+els.createTeamBtn.onclick = createTeam;
+els.submitReportBtn.onclick = submitReport;
+els.submitSuggestBtn.onclick = submitSuggestion;
 
-async function logout(){
-    const result = await runServerFunction("logoutAccount")
-    alert(result.message || result.error)
-}
+document.getElementById('createAccountBtn').onclick = () => loginOrRegister('register');
+document.getElementById('loginAccountBtn').onclick = () => loginOrRegister('login');
+els.logoutAccountBtn.onclick = logoutAccount;
+els.deleteAccountBtn.onclick = showDeleteBox;
+els.cancelDeleteBtn.onclick = hideDeleteBox;
+els.confirmDeleteBtn.onclick = deleteAccount;
 
-async function submitSuggestion(){
-    const category = document.getElementById("suggestionCategory").value
-    const title = document.getElementById("suggestionTitle").value
-    const details = document.getElementById("suggestionDetails").value
+(async function init() {
+  resize();
+  loadLocalGuest();
+  setStats();
+  renderShop();
+  try {
+    await loadGameData();
+    await loadSession();
+  } catch (err) {
+    console.error(err);
+    toast('Offline mode active.');
+  }
+  if (!state.account) {
+    loadLocalGuest();
+    saveLocalGuest();
+  }
+  setStats();
+  requestAnimationFrame(loop);
+})();
 
-    const result = await runServerFunction("submitSuggestion",{
-        category,
-        title,
-        details
-    })
-
-    alert(result.message || result.error)
-
-    loadSuggestions()
-}
-
-async function loadSuggestions(){
-    const data = await runServerFunction("getSuggestionData")
-
-    const container = document.getElementById("suggestionList")
-    container.innerHTML = ""
-
-    ;(data.suggestions || []).forEach(item=>{
-        const div = document.createElement("div")
-        div.className = "card"
-
-        div.innerHTML = `
-            <h3>${item.title}</h3>
-            <div>${item.details}</div>
-            <div class="small">${item.category} • ${item.username}</div>
-            <div class="voteRow">
-                <button onclick="voteSuggestion('${item.id}','heart')">
-                    ❤️ ${item.hearts}
-                </button>
-
-                <button onclick="voteSuggestion('${item.id}','dislike')">
-                    👎 ${item.dislikes}
-                </button>
-            </div>
-        `
-
-        container.appendChild(div)
-    })
-}
-
-async function voteSuggestion(id,reaction){
-    await runServerFunction("voteSuggestion",{
-        suggestionId:id,
-        reaction
-    })
-
-    loadSuggestions()
-}
-
-async function submitReport(){
-    const category = document.getElementById("reportCategory").value
-    const title = document.getElementById("reportTitle").value
-    const details = document.getElementById("reportDetails").value
-
-    const result = await runServerFunction("submitReport",{
-        category,
-        title,
-        details
-    })
-
-    alert(result.message || result.error)
-}
-
-async function createTeam(){
-    const name = document.getElementById("teamName").value
-
-    const result = await runServerFunction("createTeam",{
-        name,
-        maxPlayers:5
-    })
-
-    alert(result.message || result.error)
-}
-
-async function refreshLeaderboards(){
-    const data = await runServerFunction("getLeaderboards")
-
-    const container = document.getElementById("leaderboardList")
-    container.innerHTML = ""
-
-    ;(data.highscores || []).forEach((row,index)=>{
-        const div = document.createElement("div")
-        div.className = "card"
-
-        div.innerHTML = `
-            <div>#${index + 1} ${row.username}</div>
-            <div>Best: ${row.best}</div>
-            <div>Coins: ${row.coins}</div>
-        `
-
-        container.appendChild(div)
-    })
-}
-
-function runServerFunction(name,data){
-    return new Promise(resolve=>{
-        if(typeof google !== "undefined"){
-            google.script.run
-                .withSuccessHandler(resolve)
-                [name](data)
-        }else{
-            resolve({
-                ok:true,
-                message:"Node server placeholder active."
-            })
-        }
-    })
-}
-
-loadSuggestions()
-refreshLeaderboards()
+setInterval(() => {
+  if (state.playing && !state.paused && state.account) saveProgress();
+}, 12000);
 </script>
-
 </body>
 </html>
