@@ -11,6 +11,7 @@ const io = new Server(server, { cors: { origin: true, credentials: true } });
 
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
+const INDEX_FILE = path.join(__dirname, 'index.html');
 const AUTH_COOKIE = 'fd_auth';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'flappy-duck-secret';
 const ADMIN_EMAIL = '350408962@tdsb.ca';
@@ -25,13 +26,25 @@ const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
-app.get('/', (req, res) => {
-  const indexFile = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
-  res.status(200).send('Flappy Duck server is running.');
-});
+function sendIndex(res) {
+  if (fs.existsSync(INDEX_FILE)) {
+    return res.sendFile(INDEX_FILE);
+  }
+
+  return res.status(200).type('html').send(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Flappy Duck</title>
+</head>
+<body>
+  <h1>Flappy Duck server is running.</h1>
+  <p>index.html was not found beside server.js.</p>
+</body>
+</html>`);
+}
 
 function defaultTeamWars() {
   const season = currentSeason();
@@ -88,6 +101,7 @@ function readData() {
 
 function writeData(data) {
   const clean = normalizeData(data);
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   const tmp = DATA_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(clean, null, 2), 'utf8');
   fs.renameSync(tmp, DATA_FILE);
@@ -410,16 +424,19 @@ function getTeamWarsData() {
   };
 }
 
-function awardTeamWarPoints(teamId, points) {
+function awardTeamWarPointsInData(data, teamId, points) {
   const id = String(teamId || '').trim();
   if (!id) return false;
-  const data = readData();
+
   const season = currentSeason();
   let state = data.teamWars || defaultTeamWars();
-  if (String(state.seasonId || '') !== String(season.id)) state = defaultTeamWars();
+  if (String(state.seasonId || '') !== String(season.id)) {
+    state = defaultTeamWars();
+  }
 
   state.teams = Array.isArray(state.teams) ? state.teams : [];
   let row = state.teams.find(t => String(t.teamId) === id);
+
   if (!row) {
     row = { teamId: id, teamName: 'Team', points: 0, updatedAt: Date.now() };
     state.teams.push(row);
@@ -431,7 +448,6 @@ function awardTeamWarPoints(teamId, points) {
   row.updatedAt = Date.now();
 
   data.teamWars = state;
-  writeData(data);
   return true;
 }
 
@@ -625,11 +641,6 @@ function voteReactionTarget(item, vote, key) {
   recalcVotes(item);
 }
 
-function defaultAuthHeaders() {
-  return {};
-}
-
-/* Accounts */
 app.get('/api/session', (req, res) => res.json(getAuthState(req)));
 
 app.post('/api/register', (req, res) => {
@@ -730,7 +741,6 @@ app.post('/api/delete-account', (req, res) => {
   res.json({ ok: true, message: 'Account deleted.' });
 });
 
-/* Game data */
 app.get('/api/game-data', (req, res) => {
   res.json(getGameDataForAccount(currentAccount(req)));
 });
@@ -777,7 +787,7 @@ app.post(['/api/game/save', '/api/save', '/api/save-game', '/api/game-data/save'
       }
       team.updatedAt = Date.now();
       const scoreDelta = Math.max(0, account.best - prevBest) + Math.floor(Math.max(0, account.coins - prevCoins) / 10);
-      if (scoreDelta > 0) awardTeamWarPoints(account.teamId, scoreDelta);
+      if (scoreDelta > 0) awardTeamWarPointsInData(data, account.teamId, scoreDelta);
     }
   }
 
@@ -801,15 +811,16 @@ app.get('/api/leaderboards', (req, res) => {
   });
 });
 
-/* Chat */
 app.get('/api/chat', (req, res) => {
   const data = readData();
   res.json({ messages: readChat(data) });
 });
+
 app.get('/api/chat/messages', (req, res) => {
   const data = readData();
   res.json({ messages: readChat(data) });
 });
+
 app.post('/api/chat/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -830,10 +841,10 @@ app.post('/api/chat/send', (req, res) => {
   res.json({ ok: true, messages: data.chat });
 });
 
-/* Reports */
 app.get('/api/reports', (req, res) => {
   res.json(getReportData(req));
 });
+
 app.post('/api/reports/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -868,6 +879,7 @@ app.post('/api/reports/send', (req, res) => {
     data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
   });
 });
+
 app.post('/api/reports/vote', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -885,6 +897,7 @@ app.post('/api/reports/vote', (req, res) => {
     data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
   });
 });
+
 app.post('/api/reports/ban-target', (req, res) => {
   if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const data = readData();
@@ -901,10 +914,10 @@ app.post('/api/reports/ban-target', (req, res) => {
   res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
-/* Suggestions */
 app.get('/api/suggestions', (req, res) => {
   res.json(getSuggestionData(req));
 });
+
 app.post('/api/suggestions/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -936,6 +949,7 @@ app.post('/api/suggestions/send', (req, res) => {
     data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
   });
 });
+
 app.post('/api/suggestions/vote', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -953,6 +967,7 @@ app.post('/api/suggestions/vote', (req, res) => {
     data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
   });
 });
+
 app.post('/api/suggestions/comment', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -995,7 +1010,6 @@ app.post('/api/suggestions/comment', (req, res) => {
   });
 });
 
-/* Teams */
 app.get(['/api/teams', '/api/team-data'], (req, res) => {
   res.json(getTeamDataSnapshot(req));
 });
@@ -1246,15 +1260,16 @@ app.post('/api/teams/unban', (req, res) => {
   res.json({ ok: true, message: before !== (team.bans || []).length ? 'Member unbanned.' : 'Nothing to unban.' });
 });
 
-/* Events and team wars */
 app.get('/api/events', (req, res) => {
   const data = readData();
   res.json({ events: data.events || defaultEvents() });
 });
+
 app.get('/api/event-data', (req, res) => {
   const data = readData();
   res.json({ events: data.events || defaultEvents() });
 });
+
 app.get('/api/team-wars', (req, res) => res.json(getTeamWarsData()));
 app.get('/api/team-wars/data', (req, res) => res.json(getTeamWarsData()));
 
@@ -1281,7 +1296,6 @@ app.post('/api/events/claim', (req, res) => {
   res.json({ ok: true, message: `Claimed ${Number(event.rewardCoins || 0)} coins.`, data: publicAccount(account), events: { events: data.events.featured || [] } });
 });
 
-/* Moderation */
 app.get('/api/moderation/accounts', (req, res) => {
   if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const data = readData();
@@ -1313,7 +1327,6 @@ app.post('/api/moderation/ban-account', (req, res) => {
   res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
-/* Misc */
 app.post('/api/username', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -1362,7 +1375,7 @@ app.get('/api/refresh', (req, res) => {
     teams,
     reports: { categories: REPORT_CATEGORIES.slice(), reports },
     suggestions: { categories: SUGGEST_CATEGORIES.slice(), suggestions },
-    events: { events: data.events || [] },
+    events: { events: data.events || defaultEvents() },
     teamWars: getTeamWarsData()
   });
 });
@@ -1413,7 +1426,6 @@ app.post('/api/cheat', (req, res) => {
   });
 });
 
-/* Multiplayer */
 const multiplayerState = new Map();
 
 io.on('connection', (socket) => {
@@ -1455,6 +1467,12 @@ io.on('connection', (socket) => {
     multiplayerState.delete(socket.id);
     socket.broadcast.emit('player-disconnected', socket.id);
   });
+});
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) return next();
+  return sendIndex(res);
 });
 
 server.listen(PORT, () => {
