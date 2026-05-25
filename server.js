@@ -12,7 +12,7 @@ const io = new Server(server, { cors: { origin: true, credentials: true } });
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
 const AUTH_COOKIE = 'fd_auth';
-const AUTH_SECRET = process.env.SESSION_SECRET || 'flappy-duck-secret';
+const AUTH_SECRET = process.env.AUTH_SECRET || 'flappy-duck-secret';
 const ADMIN_EMAIL = '350408962@tdsb.ca';
 
 const CHAT_MAX_MESSAGES = 60;
@@ -27,6 +27,17 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/', (req, res) => {
+  const indexFile = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+  res.status(200).send('Flappy Duck server is running.');
+});
+
+function defaultTeamWars() {
+  const season = currentSeason();
+  return { seasonId: season.id, startsAt: season.startsAt, endsAt: season.endsAt, teams: [] };
+}
+
 function defaultEvents() {
   const season = currentSeason();
   return {
@@ -37,11 +48,6 @@ function defaultEvents() {
       { id: 'team-war-boost', title: 'Team War Bonus', desc: 'Your runs push your team upward in Team Wars.', rewardCoins: 100, endsAt: season.endsAt }
     ]
   };
-}
-
-function defaultTeamWars() {
-  const season = currentSeason();
-  return { seasonId: season.id, startsAt: season.startsAt, endsAt: season.endsAt, teams: [] };
 }
 
 function defaultData() {
@@ -119,17 +125,21 @@ function parseCookies(req) {
   const header = String(req.headers.cookie || '');
   if (!header) return {};
   const out = {};
-  header.split(';').forEach(pair => {
+  for (const pair of header.split(';')) {
     const idx = pair.indexOf('=');
-    if (idx < 0) return;
+    if (idx < 0) continue;
     const key = pair.slice(0, idx).trim();
     const val = pair.slice(idx + 1).trim();
-    out[key] = decodeURIComponent(val);
-  });
+    try {
+      out[key] = decodeURIComponent(val);
+    } catch {
+      out[key] = val;
+    }
+  }
   return out;
 }
 
-function getSessionAccountId(req) {
+function getAuthAccountId(req) {
   const raw = parseCookies(req)[AUTH_COOKIE];
   if (!raw) return '';
   const dot = raw.lastIndexOf('.');
@@ -184,14 +194,9 @@ function publicAccount(account) {
 
 function currentAccount(req) {
   const data = readData();
-  const id = getSessionAccountId(req);
+  const id = getAuthAccountId(req);
   if (!id) return null;
   return findAccountById(data, id);
-}
-
-function currentSeason() {
-  const startsAt = weekStartMs(Date.now());
-  return { id: new Date(startsAt).toISOString().slice(0, 10), startsAt, endsAt: startsAt + WEEK_MS };
 }
 
 function weekStartMs(ts = Date.now()) {
@@ -200,6 +205,11 @@ function weekStartMs(ts = Date.now()) {
   d.setUTCHours(0, 0, 0, 0);
   d.setUTCDate(d.getUTCDate() - day);
   return d.getTime();
+}
+
+function currentSeason() {
+  const startsAt = weekStartMs(Date.now());
+  return { id: new Date(startsAt).toISOString().slice(0, 10), startsAt, endsAt: startsAt + WEEK_MS };
 }
 
 function upsertLeaderboardRow(data, accountId, username, best, coins) {
@@ -294,6 +304,15 @@ function summarizeSuggestion(suggestion, myKey) {
   };
 }
 
+function findSuggestionComment(comments, commentId) {
+  for (const comment of (comments || [])) {
+    if (String(comment.id) === String(commentId)) return comment;
+    const nested = findSuggestionComment(comment.replies || [], commentId);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function createTeamMember(key, username, role, best, coins) {
   return {
     key: String(key || '').trim(),
@@ -323,36 +342,11 @@ function summarizeTeam(team) {
 }
 
 function findTeamById(state, teamId) {
-  return (state.teams || []).find((r) => String(r.id) === String(teamId)) || null;
-}
-
-function sanitizeTeamForCurrentUser(team, currentKey) {
-  const isOwner = String(team.ownerKey || '') === String(currentKey || '');
-  const base = summarizeTeam(team);
-  base.members = (team.members || []).map(m => ({ key: m.key, username: m.username, role: m.role || 'member', best: Number(m.best || 0), coins: Number(m.coins || 0) }));
-  base.isOwner = isOwner;
-  base.requests = isOwner ? (team.requests || []).map(r => ({ key: r.key, username: r.username, ts: Number(r.ts || Date.now()) })) : [];
-  base.invites = isOwner ? (team.invites || []).map(i => ({ username: i.username, key: i.key || '', ts: Number(i.ts || Date.now()) })) : [];
-  base.bans = isOwner ? (team.bans || []).map(b => ({ key: b.key || '', username: b.username || 'Unknown', ts: Number(b.ts || Date.now()) })) : [];
-  return base;
+  return (state.teams || []).find(t => String(t.id) === String(teamId)) || null;
 }
 
 function clampTeamSize(n) {
   return Math.max(5, Math.min(10, Number(n) || 5));
-}
-
-function resolveTeamIdForUser(key, username) {
-  const state = { teams: readData().teams || [] };
-  const k = String(key || '').trim();
-  const u = sanitizeUsername(username) || '';
-  for (const team of state.teams || []) {
-    for (const member of team.members || []) {
-      if ((k && String(member.key || '') === k) || (u && String(member.username || '').toLowerCase() === u.toLowerCase())) {
-        return team.id;
-      }
-    }
-  }
-  return '';
 }
 
 function isBannedFromTeam(team, key, username) {
@@ -365,13 +359,23 @@ function isBannedFromTeam(team, key, username) {
   });
 }
 
-function defaultTeamWarsSnapshot() {
-  return currentSeason().id;
+function resolveTeamIdForUser(key, username) {
+  const data = readData();
+  const k = String(key || '').trim();
+  const u = sanitizeUsername(username) || '';
+  for (const team of data.teams || []) {
+    for (const member of team.members || []) {
+      if ((k && String(member.key || '') === k) || (u && String(member.username || '').toLowerCase() === u.toLowerCase())) {
+        return team.id;
+      }
+    }
+  }
+  return '';
 }
 
 function getTeamLeaderboard() {
-  const state = readData();
-  return (state.teams || [])
+  const data = readData();
+  return (data.teams || [])
     .map(team => summarizeTeam(team))
     .sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0) || (Number(b.totalCoins) || 0) - (Number(a.totalCoins) || 0))
     .slice(0, 10);
@@ -381,11 +385,13 @@ function getTeamWarsData() {
   const data = readData();
   const season = currentSeason();
   const state = data.teamWars || defaultTeamWars();
+
   if (String(state.seasonId || '') !== String(season.id)) {
     data.teamWars = defaultTeamWars();
     writeData(data);
     return { season: currentSeason(), leaderboard: [] };
   }
+
   const leaderboard = (state.teams || [])
     .slice()
     .sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0))
@@ -397,6 +403,7 @@ function getTeamWarsData() {
       points: Number(row.points || 0),
       updatedAt: Number(row.updatedAt || Date.now())
     }));
+
   return {
     season: { id: state.seasonId, startsAt: Number(state.startsAt || season.startsAt), endsAt: Number(state.endsAt || season.endsAt) },
     leaderboard
@@ -410,16 +417,19 @@ function awardTeamWarPoints(teamId, points) {
   const season = currentSeason();
   let state = data.teamWars || defaultTeamWars();
   if (String(state.seasonId || '') !== String(season.id)) state = defaultTeamWars();
+
   state.teams = Array.isArray(state.teams) ? state.teams : [];
   let row = state.teams.find(t => String(t.teamId) === id);
   if (!row) {
     row = { teamId: id, teamName: 'Team', points: 0, updatedAt: Date.now() };
     state.teams.push(row);
   }
+
   const team = findTeamById({ teams: data.teams || [] }, id);
   row.teamName = team ? String(team.name || 'Team') : 'Team';
   row.points = Math.max(0, Number(row.points || 0)) + Math.max(0, Number(points || 0));
   row.updatedAt = Date.now();
+
   data.teamWars = state;
   writeData(data);
   return true;
@@ -430,7 +440,7 @@ function isAdminRequest(req) {
   return token && token === String(process.env.ADMIN_KEY || '');
 }
 
-function getAccountSession(req) {
+function getAuthState(req) {
   const account = currentAccount(req);
   if (!account) return { ok: true, account: null, playerKey: '', moderator: false };
   return { ok: true, account: publicAccount(account), playerKey: String(account.accountId || ''), moderator: false };
@@ -485,8 +495,8 @@ function normalizeSkins(skins) {
   return out;
 }
 
-function getReportData() {
-  const key = getSessionAccountId(reqLike());
+function getReportData(req) {
+  const key = getAuthAccountId(req);
   const data = readData();
   const reports = (data.reports || []).map(r => summarizeReport(r, key)).sort((a, b) => {
     const cat = String(a.category || '').localeCompare(String(b.category || ''));
@@ -496,25 +506,131 @@ function getReportData() {
   return { categories: REPORT_CATEGORIES.slice(), reports };
 }
 
-function getSuggestionData() {
-  const key = getSessionAccountId(reqLike());
+function getSuggestionData(req) {
+  const key = getAuthAccountId(req);
   const data = readData();
-  const suggestions = (data.suggestions || [])
-    .map(suggestion => summarizeSuggestion(suggestion, key))
-    .sort((a, b) =>
-      String(a.category || '').localeCompare(String(b.category || '')) ||
-      ((Number(b.hearts) || 0) - (Number(b.dislikes) || 0)) - ((Number(a.hearts) || 0) - (Number(a.dislikes) || 0)) ||
-      (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-    );
+  const suggestions = (data.suggestions || []).map(s => summarizeSuggestion(s, key)).sort((a, b) => {
+    const cat = String(a.category || '').localeCompare(String(b.category || ''));
+    if (cat) return cat;
+    return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  });
   return { categories: SUGGEST_CATEGORIES.slice(), suggestions };
 }
 
-function reqLike() {
-  return { headers: { cookie: '' } };
+function getTeamDataSnapshot(req) {
+  const data = readData();
+  const key = getAuthAccountId(req);
+  const account = currentAccount(req);
+  const username = sanitizeUsername(account && account.username) || 'Guest';
+  const resolvedTeamId = resolveTeamIdForUser(key, username);
+  const currentTeam = resolvedTeamId ? findTeamById({ teams: data.teams || [] }, resolvedTeamId) : null;
+
+  const invites = [];
+  for (const team of data.teams || []) {
+    for (const inv of team.invites || []) {
+      if ((sanitizeUsername(inv.username) || '') === username) {
+        invites.push({
+          id: team.id,
+          name: team.name,
+          ownerName: team.ownerName,
+          maxPlayers: Number(team.maxPlayers || 5),
+          memberCount: (team.members || []).length
+        });
+      }
+    }
+  }
+
+  const requests = [];
+  for (const team of data.teams || []) {
+    for (const reqItem of team.requests || []) {
+      if (String(reqItem.key || '') === key) {
+        requests.push({
+          id: team.id,
+          name: team.name,
+          ownerName: team.ownerName,
+          ts: Number(reqItem.ts || Date.now())
+        });
+      }
+    }
+  }
+
+  return {
+    teams: (data.teams || []).map(summarizeTeam).sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0)),
+    leaderboard: getTeamLeaderboard(),
+    currentTeam: currentTeam ? sanitizeTeamForCurrentUser(currentTeam, key) : null,
+    invites,
+    requests
+  };
 }
 
-// Accounts
-app.get('/api/session', (req, res) => res.json(getAccountSession(req)));
+function sanitizeTeamForCurrentUser(team, currentKey) {
+  const isOwner = String(team.ownerKey || '') === String(currentKey || '');
+  const base = summarizeTeam(team);
+  base.members = (team.members || []).map(m => ({
+    key: m.key,
+    username: m.username,
+    role: m.role || 'member',
+    best: Number(m.best || 0),
+    coins: Number(m.coins || 0)
+  }));
+  base.isOwner = isOwner;
+  base.requests = isOwner ? (team.requests || []).map(r => ({ key: r.key, username: r.username, ts: Number(r.ts || Date.now()) })) : [];
+  base.invites = isOwner ? (team.invites || []).map(i => ({ username: i.username, key: i.key || '', ts: Number(i.ts || Date.now()) })) : [];
+  base.bans = isOwner ? (team.bans || []).map(b => ({ key: b.key || '', username: b.username || 'Unknown', ts: Number(b.ts || Date.now()) })) : [];
+  return base;
+}
+
+function createTeam(data, req) {
+  const account = currentAccount(req);
+  if (!account) return { ok: false, error: 'Please log in first.' };
+
+  const key = String(account.accountId || '');
+  const username = sanitizeUsername(account.username) || 'Guest';
+  const name = String(data && data.name || '').trim().replace(/\s+/g, ' ');
+  const maxPlayers = clampTeamSize(data && data.maxPlayers);
+
+  if (!/^[A-Za-z0-9 _-]{3,24}$/.test(name)) {
+    return { ok: false, error: 'Team name must be 3-24 characters and can only contain letters, numbers, spaces, underscores, and dashes.' };
+  }
+
+  const db = readData();
+  if (resolveTeamIdForUser(key, username)) return { ok: false, error: 'Leave your current team before creating a new one.' };
+
+  const team = {
+    id: crypto.randomUUID(),
+    name,
+    ownerKey: key,
+    ownerName: username,
+    maxPlayers,
+    members: [createTeamMember(key, username, 'owner', account.best, account.coins)],
+    requests: [],
+    invites: [],
+    bans: [],
+    updatedAt: Date.now()
+  };
+
+  db.teams.push(team);
+  account.teamId = team.id;
+  const idx = db.accounts.findIndex(a => String(a.accountId) === key);
+  if (idx >= 0) db.accounts[idx] = account;
+  writeData(db);
+
+  return { ok: true, message: 'Team created.', team: sanitizeTeamForCurrentUser(team, key), data: getTeamDataSnapshot(req) };
+}
+
+function voteReactionTarget(item, vote, key) {
+  item.reactions = item.reactions && typeof item.reactions === 'object' ? item.reactions : {};
+  if (item.reactions[key] === vote) delete item.reactions[key];
+  else item.reactions[key] = vote;
+  recalcVotes(item);
+}
+
+function defaultAuthHeaders() {
+  return {};
+}
+
+/* Accounts */
+app.get('/api/session', (req, res) => res.json(getAuthState(req)));
 
 app.post('/api/register', (req, res) => {
   const username = sanitizeUsername(req.body.username);
@@ -614,7 +730,7 @@ app.post('/api/delete-account', (req, res) => {
   res.json({ ok: true, message: 'Account deleted.' });
 });
 
-// Game data
+/* Game data */
 app.get('/api/game-data', (req, res) => {
   res.json(getGameDataForAccount(currentAccount(req)));
 });
@@ -643,6 +759,7 @@ app.post(['/api/game/save', '/api/save', '/api/save-game', '/api/game-data/save'
   const data = readData();
   const idx = data.accounts.findIndex(a => String(a.accountId) === String(account.accountId));
   if (idx >= 0) data.accounts[idx] = account;
+
   upsertLeaderboardRow(data, account.accountId, account.username, account.best, account.coins);
 
   if (String(account.teamId || '')) {
@@ -684,7 +801,7 @@ app.get('/api/leaderboards', (req, res) => {
   });
 });
 
-// Chat
+/* Chat */
 app.get('/api/chat', (req, res) => {
   const data = readData();
   res.json({ messages: readChat(data) });
@@ -701,26 +818,26 @@ app.post('/api/chat/send', (req, res) => {
 
   const data = readData();
   data.chat = readChat(data);
-  data.chat.push({ id: crypto.randomUUID(), key: String(account.accountId || ''), username: sanitizeUsername(account.username) || 'Guest', text, ts: Date.now() });
+  data.chat.push({
+    id: crypto.randomUUID(),
+    key: String(account.accountId || ''),
+    username: sanitizeUsername(account.username) || 'Guest',
+    text,
+    ts: Date.now()
+  });
   if (data.chat.length > CHAT_MAX_MESSAGES) data.chat = data.chat.slice(-CHAT_MAX_MESSAGES);
   writeData(data);
   res.json({ ok: true, messages: data.chat });
 });
 
-// Reports
+/* Reports */
 app.get('/api/reports', (req, res) => {
-  const data = readData();
-  const myKey = getSessionAccountId(req);
-  const reports = (data.reports || []).map(r => summarizeReport(r, myKey)).sort((a, b) => {
-    const cat = String(a.category || '').localeCompare(String(b.category || ''));
-    if (cat) return cat;
-    return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
-  });
-  res.json({ categories: REPORT_CATEGORIES.slice(), reports });
+  res.json(getReportData(req));
 });
 app.post('/api/reports/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const categoryInput = String(req.body.category || '').trim().toLowerCase();
   const category = REPORT_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
   const title = sanitizeText(req.body.title, 48);
@@ -745,7 +862,11 @@ app.post('/api/reports/send', (req, res) => {
   });
   if (data.reports.length > REPORT_MAX) data.reports = data.reports.slice(-REPORT_MAX);
   writeData(data);
-  res.json({ ok: true, message: 'Report submitted.', data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
+  res.json({
+    ok: true,
+    message: 'Report submitted.',
+    data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
+  });
 });
 app.post('/api/reports/vote', (req, res) => {
   const account = currentAccount(req);
@@ -757,12 +878,12 @@ app.post('/api/reports/vote', (req, res) => {
   const report = (data.reports || []).find(r => String(r.id) === String(req.body.reportId || ''));
   if (!report) return res.json({ ok: false, error: 'Report not found.' });
 
-  report.reactions = report.reactions && typeof report.reactions === 'object' ? report.reactions : {};
-  const key = String(account.accountId || '');
-  if (report.reactions[key] === vote) delete report.reactions[key];
-  else report.reactions[key] = vote;
+  voteReactionTarget(report, vote, String(account.accountId || ''));
   writeData(data);
-  res.json({ ok: true, data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getSessionAccountId(req))) } });
+  res.json({
+    ok: true,
+    data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
+  });
 });
 app.post('/api/reports/ban-target', (req, res) => {
   if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
@@ -780,20 +901,14 @@ app.post('/api/reports/ban-target', (req, res) => {
   res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
-// Suggestions
+/* Suggestions */
 app.get('/api/suggestions', (req, res) => {
-  const data = readData();
-  const myKey = getSessionAccountId(req);
-  const suggestions = (data.suggestions || []).map(s => summarizeSuggestion(s, myKey)).sort((a, b) => {
-    const cat = String(a.category || '').localeCompare(String(b.category || ''));
-    if (cat) return cat;
-    return ((Number(b.hearts) - Number(b.dislikes)) - (Number(a.hearts) - Number(a.dislikes))) || ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
-  });
-  res.json({ categories: SUGGEST_CATEGORIES.slice(), suggestions });
+  res.json(getSuggestionData(req));
 });
 app.post('/api/suggestions/send', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const categoryInput = String(req.body.category || '').trim().toLowerCase();
   const category = SUGGEST_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
   const title = sanitizeText(req.body.title, 48);
@@ -815,7 +930,11 @@ app.post('/api/suggestions/send', (req, res) => {
   });
   if (data.suggestions.length > SUGGEST_MAX) data.suggestions = data.suggestions.slice(-SUGGEST_MAX);
   writeData(data);
-  res.json({ ok: true, message: 'Suggestion submitted.', data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({
+    ok: true,
+    message: 'Suggestion submitted.',
+    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+  });
 });
 app.post('/api/suggestions/vote', (req, res) => {
   const account = currentAccount(req);
@@ -827,23 +946,13 @@ app.post('/api/suggestions/vote', (req, res) => {
   const suggestion = (data.suggestions || []).find(s => String(s.id) === String(req.body.suggestionId || ''));
   if (!suggestion) return res.json({ ok: false, error: 'Suggestion not found.' });
 
-  suggestion.reactions = suggestion.reactions && typeof suggestion.reactions === 'object' ? suggestion.reactions : {};
-  const key = String(account.accountId || '');
-  if (suggestion.reactions[key] === vote) delete suggestion.reactions[key];
-  else suggestion.reactions[key] = vote;
+  voteReactionTarget(suggestion, vote, String(account.accountId || ''));
   writeData(data);
-  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({
+    ok: true,
+    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+  });
 });
-
-function findSuggestionComment(comments, commentId) {
-  for (const comment of (comments || [])) {
-    if (String(comment.id) === String(commentId)) return comment;
-    const nested = findSuggestionComment(comment.replies || [], commentId);
-    if (nested) return nested;
-  }
-  return null;
-}
-
 app.post('/api/suggestions/comment', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
@@ -880,91 +989,21 @@ app.post('/api/suggestions/comment', (req, res) => {
   }
 
   writeData(data);
-  res.json({ ok: true, data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getSessionAccountId(req))) } });
+  res.json({
+    ok: true,
+    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+  });
 });
 
-// Teams
-function getTeamDataSnapshot(req) {
-  const data = readData();
-  const key = getSessionAccountId(req);
-  const account = currentAccount(req);
-  const username = sanitizeUsername(account && account.username) || 'Guest';
-  const state = { teams: Array.isArray(data.teams) ? data.teams : [] };
-  const resolvedTeamId = resolveTeamIdForUser(key, username);
-  const currentTeam = resolvedTeamId ? findTeamById(state, resolvedTeamId) : null;
-
-  const invites = [];
-  for (const team of state.teams || []) {
-    for (const inv of team.invites || []) {
-      if ((sanitizeUsername(inv.username) || '') === username) {
-        invites.push({
-          id: team.id,
-          name: team.name,
-          ownerName: team.ownerName,
-          maxPlayers: Number(team.maxPlayers || 5),
-          memberCount: (team.members || []).length
-        });
-      }
-    }
-  }
-
-  const requests = [];
-  for (const team of state.teams || []) {
-    for (const reqItem of team.requests || []) {
-      if (String(reqItem.key || '') === key) {
-        requests.push({ id: team.id, name: team.name, ownerName: team.ownerName, ts: Number(reqItem.ts || Date.now()) });
-      }
-    }
-  }
-
-  return {
-    teams: (state.teams || []).map(summarizeTeam).sort((a, b) => (Number(b.totalBest) || 0) - (Number(a.totalBest) || 0)),
-    leaderboard: getTeamLeaderboard(),
-    currentTeam: currentTeam ? sanitizeTeamForCurrentUser(currentTeam, key) : null,
-    invites,
-    requests
-  };
-}
-
+/* Teams */
 app.get(['/api/teams', '/api/team-data'], (req, res) => {
   res.json(getTeamDataSnapshot(req));
 });
 
 app.post('/api/teams/create', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-  const key = String(account.accountId || '');
-  const username = sanitizeUsername(account.username) || 'Guest';
-  const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
-  const maxPlayers = clampTeamSize(req.body.maxPlayers);
-
-  if (!/^[A-Za-z0-9 _-]{3,24}$/.test(name)) {
-    return res.json({ ok: false, error: 'Team name must be 3-24 characters and can only contain letters, numbers, spaces, underscores, and dashes.' });
-  }
-
-  const data = readData();
-  if (resolveTeamIdForUser(key, username)) return res.json({ ok: false, error: 'Leave your current team before creating a new one.' });
-
-  const team = {
-    id: crypto.randomUUID(),
-    name,
-    ownerKey: key,
-    ownerName: username,
-    maxPlayers,
-    members: [createTeamMember(key, username, 'owner', account.best, account.coins)],
-    requests: [],
-    invites: [],
-    bans: [],
-    updatedAt: Date.now()
-  };
-
-  data.teams = Array.isArray(data.teams) ? data.teams : [];
-  data.teams.push(team);
-  account.teamId = team.id;
-  const idx = data.accounts.findIndex(a => String(a.accountId) === key);
-  if (idx >= 0) data.accounts[idx] = account;
-  writeData(data);
-  res.json({ ok: true, message: 'Team created.', team: sanitizeTeamForCurrentUser(team, key), data: getTeamDataSnapshot(req) });
+  const result = createTeam(req.body || {}, req);
+  if (!result.ok) return res.json(result);
+  res.json(result);
 });
 
 app.post('/api/teams/join', (req, res) => {
@@ -973,6 +1012,7 @@ app.post('/api/teams/join', (req, res) => {
   const key = String(account.accountId || '');
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
+
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
@@ -1027,6 +1067,7 @@ app.post('/api/teams/respond', (req, res) => {
 app.post('/api/teams/leave', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const username = sanitizeUsername(account.username) || 'Guest';
   const data = readData();
@@ -1037,6 +1078,7 @@ app.post('/api/teams/leave', (req, res) => {
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
 
   team.members = (team.members || []).filter(m => String(m.key || '') !== key && String(m.username || '').toLowerCase() !== username.toLowerCase());
+
   if (String(team.ownerKey || '') === key) {
     if (team.members.length) {
       const nextOwner = team.members[0];
@@ -1064,6 +1106,7 @@ app.post('/api/teams/leave', (req, res) => {
 app.post('/api/teams/invite', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const inviter = sanitizeUsername(account.username) || 'Guest';
   const target = sanitizeUsername(req.body.username);
@@ -1089,13 +1132,17 @@ app.post('/api/teams/invite', (req, res) => {
 app.post('/api/teams/accept', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
+
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
-  if (resolveTeamIdForUser(key, username) && resolveTeamIdForUser(key, username) !== teamId) return res.json({ ok: false, error: 'Leave your current team first.' });
+  if (resolveTeamIdForUser(key, username) && resolveTeamIdForUser(key, username) !== teamId) {
+    return res.json({ ok: false, error: 'Leave your current team first.' });
+  }
 
   const inviteIdx = (team.invites || []).findIndex(i => sanitizeUsername(i.username) === username);
   if (inviteIdx < 0) return res.json({ ok: false, error: 'Invite not found.' });
@@ -1103,7 +1150,9 @@ app.post('/api/teams/accept', (req, res) => {
   if ((team.members || []).length >= clampTeamSize(team.maxPlayers)) return res.json({ ok: false, error: 'That team is full.' });
 
   team.members = Array.isArray(team.members) ? team.members : [];
-  if (!team.members.some(m => String(m.key || '') === key)) team.members.push(createTeamMember(key, username, 'member', account.best, account.coins));
+  if (!team.members.some(m => String(m.key || '') === key)) {
+    team.members.push(createTeamMember(key, username, 'member', account.best, account.coins));
+  }
   team.invites.splice(inviteIdx, 1);
   team.updatedAt = Date.now();
   account.teamId = teamId;
@@ -1116,11 +1165,13 @@ app.post('/api/teams/accept', (req, res) => {
 app.post('/api/teams/decline', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const username = sanitizeUsername(account.username) || 'Guest';
   const teamId = String(req.body.teamId || '').trim();
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
+
   team.invites = (team.invites || []).filter(i => sanitizeUsername(i.username) !== username);
   team.updatedAt = Date.now();
   writeData(data);
@@ -1130,10 +1181,12 @@ app.post('/api/teams/decline', (req, res) => {
 app.post('/api/teams/kick', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const teamId = String(req.body.teamId || '').trim();
   const targetKey = String(req.body.targetKey || '').trim();
   const targetUsername = sanitizeUsername(req.body.targetUsername) || '';
+
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
@@ -1148,10 +1201,12 @@ app.post('/api/teams/kick', (req, res) => {
 app.post('/api/teams/ban', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const teamId = String(req.body.teamId || '').trim();
   const targetKey = String(req.body.targetKey || '').trim();
   const targetUsername = sanitizeUsername(req.body.targetUsername) || '';
+
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
@@ -1161,7 +1216,9 @@ app.post('/api/teams/ban', (req, res) => {
   const member = memberIdx >= 0 ? team.members[memberIdx] : { key: targetKey, username: targetUsername || 'Unknown' };
   if (memberIdx >= 0) team.members.splice(memberIdx, 1);
   team.bans = Array.isArray(team.bans) ? team.bans : [];
-  if (!isBannedFromTeam(team, member.key, member.username)) team.bans.push({ key: member.key || targetKey, username: member.username || targetUsername || 'Unknown', ts: Date.now() });
+  if (!isBannedFromTeam(team, member.key, member.username)) {
+    team.bans.push({ key: member.key || targetKey, username: member.username || targetUsername || 'Unknown', ts: Date.now() });
+  }
   team.requests = (team.requests || []).filter(r => !(String(r.key || '') === targetKey || sanitizeUsername(r.username) === targetUsername));
   team.invites = (team.invites || []).filter(i => !(String(i.key || '') === targetKey || sanitizeUsername(i.username) === targetUsername));
   team.updatedAt = Date.now();
@@ -1172,9 +1229,11 @@ app.post('/api/teams/ban', (req, res) => {
 app.post('/api/teams/unban', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const key = String(account.accountId || '');
   const teamId = String(req.body.teamId || '').trim();
   const target = String(req.body.target || '').trim();
+
   const data = readData();
   const team = findTeamById({ teams: data.teams || [] }, teamId);
   if (!team) return res.json({ ok: false, error: 'Team not found.' });
@@ -1187,7 +1246,7 @@ app.post('/api/teams/unban', (req, res) => {
   res.json({ ok: true, message: before !== (team.bans || []).length ? 'Member unbanned.' : 'Nothing to unban.' });
 });
 
-// Events and team wars
+/* Events and team wars */
 app.get('/api/events', (req, res) => {
   const data = readData();
   res.json({ events: data.events || defaultEvents() });
@@ -1202,23 +1261,27 @@ app.get('/api/team-wars/data', (req, res) => res.json(getTeamWarsData()));
 app.post('/api/events/claim', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const eventId = String(req.body.eventId || '').trim();
   const data = readData();
   const event = (data.events.featured || []).find(e => String(e.id) === eventId);
   if (!event) return res.json({ ok: false, error: 'Event not found.' });
+
   const claims = Array.isArray(account.eventClaims) ? account.eventClaims : [];
   if (claims.includes(eventId)) return res.json({ ok: false, error: 'Reward already claimed.' });
 
   account.coins = Math.max(0, Number(account.coins || 0)) + Math.max(0, Number(event.rewardCoins || 0));
   account.eventClaims = claims.concat(eventId);
+
   const idx = data.accounts.findIndex(a => String(a.accountId) === String(account.accountId));
   if (idx >= 0) data.accounts[idx] = account;
   upsertLeaderboardRow(data, account.accountId, account.username, account.best, account.coins);
   writeData(data);
+
   res.json({ ok: true, message: `Claimed ${Number(event.rewardCoins || 0)} coins.`, data: publicAccount(account), events: { events: data.events.featured || [] } });
 });
 
-// Moderation
+/* Moderation */
 app.get('/api/moderation/accounts', (req, res) => {
   if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const data = readData();
@@ -1240,6 +1303,7 @@ app.post('/api/moderation/ban-account', (req, res) => {
   const targetId = String(req.body.accountId || '').trim();
   const reason = sanitizeText(req.body.reason || 'Banned by moderator.', 180);
   if (!targetId) return res.json({ ok: false, error: 'Missing account id.' });
+
   const data = readData();
   const target = (data.accounts || []).find(a => String(a.accountId) === targetId);
   if (!target) return res.json({ ok: false, error: 'Account not found.' });
@@ -1249,15 +1313,18 @@ app.post('/api/moderation/ban-account', (req, res) => {
   res.json({ ok: true, message: `${target.username || 'Player'} banned.` });
 });
 
-// Misc helpers
+/* Misc */
 app.post('/api/username', (req, res) => {
   const account = currentAccount(req);
   if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+
   const clean = sanitizeUsername(req.body.username);
   if (!clean) return res.json({ ok: false, error: 'Invalid username.' });
+
   const data = readData();
   const clash = (data.accounts || []).find(a => String(a.accountId) !== String(account.accountId) && String(a.username || '').toLowerCase() === clean.toLowerCase());
   if (clash) return res.json({ ok: false, error: 'That username is already taken.' });
+
   account.username = clean;
   const idx = (data.accounts || []).findIndex(a => String(a.accountId) === String(account.accountId));
   if (idx >= 0) data.accounts[idx] = account;
@@ -1268,7 +1335,7 @@ app.post('/api/username', (req, res) => {
 app.get('/api/refresh', (req, res) => {
   const data = readData();
   const account = currentAccount(req);
-  const myKey = getSessionAccountId(req);
+  const myKey = getAuthAccountId(req);
   const teams = getTeamDataSnapshot(req);
   const leaderboards = {
     highscores: data.leaderboard.slice().sort((a, b) => (Number(b.best) || 0) - (Number(a.best) || 0)).slice(0, 10),
@@ -1346,6 +1413,7 @@ app.post('/api/cheat', (req, res) => {
   });
 });
 
+/* Multiplayer */
 const multiplayerState = new Map();
 
 io.on('connection', (socket) => {
