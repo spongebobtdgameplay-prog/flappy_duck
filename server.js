@@ -641,6 +641,25 @@ function voteReactionTarget(item, vote, key) {
   recalcVotes(item);
 }
 
+function normalizeIncomingBody(body) {
+  if (!body || typeof body !== 'object') return {};
+  return body;
+}
+
+function getBodyValue(body, keys, fallback = '') {
+  const data = normalizeIncomingBody(body);
+  for (const key of keys) {
+    if (
+      Object.prototype.hasOwnProperty.call(data, key) &&
+      data[key] !== undefined &&
+      data[key] !== null
+    ) {
+      return data[key];
+    }
+  }
+  return fallback;
+}
+
 app.get('/api/session', (req, res) => res.json(getAuthState(req)));
 
 app.post('/api/register', (req, res) => {
@@ -822,23 +841,31 @@ app.get('/api/chat/messages', (req, res) => {
 });
 
 app.post('/api/chat/send', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-  const text = sanitizeText(req.body.message, 120);
-  if (!text) return res.json({ ok: false, error: 'Message cannot be empty.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const data = readData();
-  data.chat = readChat(data);
-  data.chat.push({
-    id: crypto.randomUUID(),
-    key: String(account.accountId || ''),
-    username: sanitizeUsername(account.username) || 'Guest',
-    text,
-    ts: Date.now()
-  });
-  if (data.chat.length > CHAT_MAX_MESSAGES) data.chat = data.chat.slice(-CHAT_MAX_MESSAGES);
-  writeData(data);
-  res.json({ ok: true, messages: data.chat });
+    const text = sanitizeText(getBodyValue(req.body, ['message', 'text', 'value'], ''), 120);
+    if (!text) return res.json({ ok: false, error: 'Message cannot be empty.' });
+
+    const data = readData();
+    data.chat = readChat(data);
+    const message = {
+      id: crypto.randomUUID(),
+      key: String(account.accountId || ''),
+      username: sanitizeUsername(account.username) || 'Guest',
+      text,
+      ts: Date.now()
+    };
+    data.chat.push(message);
+    if (data.chat.length > CHAT_MAX_MESSAGES) data.chat = data.chat.slice(-CHAT_MAX_MESSAGES);
+    writeData(data);
+    io.emit('chat-message', message);
+    res.json({ ok: true, messages: data.chat });
+  } catch (err) {
+    console.error('/api/chat/send error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
+  }
 });
 
 app.get('/api/reports', (req, res) => {
@@ -846,56 +873,70 @@ app.get('/api/reports', (req, res) => {
 });
 
 app.post('/api/reports/send', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const categoryInput = String(req.body.category || '').trim().toLowerCase();
-  const category = REPORT_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
-  const title = sanitizeText(req.body.title, 48);
-  const details = sanitizeText(req.body.details, 240);
-  const targetAccountId = String(req.body.targetAccountId || '').trim();
-  const targetUsername = sanitizeUsername(req.body.targetUsername);
-  if (!title && !details) return res.json({ ok: false, error: 'Report cannot be empty.' });
+    const categoryInput = String(getBodyValue(req.body, ['category'], '')).trim().toLowerCase();
+    const category = REPORT_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
+    const title = sanitizeText(getBodyValue(req.body, ['title'], ''), 48);
+    const details = sanitizeText(getBodyValue(req.body, ['details'], ''), 240);
+    const targetAccountId = String(getBodyValue(req.body, ['targetAccountId'], '')).trim();
+    const targetUsername = sanitizeUsername(getBodyValue(req.body, ['targetUsername'], ''));
+    if (!title && !details) return res.json({ ok: false, error: 'Report cannot be empty.' });
 
-  const data = readData();
-  data.reports = Array.isArray(data.reports) ? data.reports : [];
-  data.reports.push({
-    id: crypto.randomUUID(),
-    category,
-    title: title || details.slice(0, 48) || 'Report',
-    details: details || title,
-    username: sanitizeUsername(account.username) || 'Guest',
-    key: String(account.accountId || ''),
-    createdAt: Date.now(),
-    reactions: {},
-    targetAccountId: targetAccountId || '',
-    targetUsername: targetUsername || ''
-  });
-  if (data.reports.length > REPORT_MAX) data.reports = data.reports.slice(-REPORT_MAX);
-  writeData(data);
-  res.json({
-    ok: true,
-    message: 'Report submitted.',
-    data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
-  });
+    const data = readData();
+    data.reports = Array.isArray(data.reports) ? data.reports : [];
+    data.reports.push({
+      id: crypto.randomUUID(),
+      category,
+      title: title || details.slice(0, 48) || 'Report',
+      details: details || title,
+      username: sanitizeUsername(account.username) || 'Guest',
+      key: String(account.accountId || ''),
+      createdAt: Date.now(),
+      reactions: {},
+      targetAccountId: targetAccountId || '',
+      targetUsername: targetUsername || ''
+    });
+    if (data.reports.length > REPORT_MAX) data.reports = data.reports.slice(-REPORT_MAX);
+    writeData(data);
+    res.json({
+      ok: true,
+      message: 'Report submitted.',
+      data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
+    });
+  } catch (err) {
+    console.error('/api/reports/send error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
+  }
 });
 
 app.post('/api/reports/vote', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-  const vote = String(req.body.reaction || '').trim().toLowerCase();
-  if (vote !== 'heart' && vote !== 'dislike') return res.json({ ok: false, error: 'Invalid vote.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const data = readData();
-  const report = (data.reports || []).find(r => String(r.id) === String(req.body.reportId || ''));
-  if (!report) return res.json({ ok: false, error: 'Report not found.' });
+    const reportId = String(getBodyValue(req.body, ['reportId', 'id'], '')).trim();
+    const vote = String(getBodyValue(req.body, ['reaction', 'vote', 'type'], '')).trim().toLowerCase();
 
-  voteReactionTarget(report, vote, String(account.accountId || ''));
-  writeData(data);
-  res.json({
-    ok: true,
-    data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
-  });
+    if (!reportId) return res.json({ ok: false, error: 'Missing report id.' });
+    if (vote !== 'heart' && vote !== 'dislike') return res.json({ ok: false, error: 'Invalid vote.' });
+
+    const data = readData();
+    const report = (data.reports || []).find(r => String(r.id) === reportId);
+    if (!report) return res.json({ ok: false, error: 'Report not found.' });
+
+    voteReactionTarget(report, vote, String(account.accountId || ''));
+    writeData(data);
+    res.json({
+      ok: true,
+      data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) }
+    });
+  } catch (err) {
+    console.error('/api/reports/vote error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
+  }
 });
 
 app.post('/api/reports/ban-target', (req, res) => {
@@ -919,95 +960,114 @@ app.get('/api/suggestions', (req, res) => {
 });
 
 app.post('/api/suggestions/send', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const categoryInput = String(req.body.category || '').trim().toLowerCase();
-  const category = SUGGEST_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
-  const title = sanitizeText(req.body.title, 48);
-  const details = sanitizeText(req.body.details, 240);
-  if (!title && !details) return res.json({ ok: false, error: 'Suggestion cannot be empty.' });
+    const categoryInput = String(getBodyValue(req.body, ['category'], '')).trim().toLowerCase();
+    const category = SUGGEST_CATEGORIES.find(c => c.toLowerCase() === categoryInput) || 'Other';
+    const title = sanitizeText(getBodyValue(req.body, ['title'], ''), 48);
+    const details = sanitizeText(getBodyValue(req.body, ['details'], ''), 240);
+    if (!title && !details) return res.json({ ok: false, error: 'Suggestion cannot be empty.' });
 
-  const data = readData();
-  data.suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
-  data.suggestions.push({
-    id: crypto.randomUUID(),
-    category,
-    title: title || details.slice(0, 48) || 'Suggestion',
-    details: details || title,
-    username: sanitizeUsername(account.username) || 'Guest',
-    key: String(account.accountId || ''),
-    createdAt: Date.now(),
-    reactions: {},
-    comments: []
-  });
-  if (data.suggestions.length > SUGGEST_MAX) data.suggestions = data.suggestions.slice(-SUGGEST_MAX);
-  writeData(data);
-  res.json({
-    ok: true,
-    message: 'Suggestion submitted.',
-    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
-  });
+    const data = readData();
+    data.suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    data.suggestions.push({
+      id: crypto.randomUUID(),
+      category,
+      title: title || details.slice(0, 48) || 'Suggestion',
+      details: details || title,
+      username: sanitizeUsername(account.username) || 'Guest',
+      key: String(account.accountId || ''),
+      createdAt: Date.now(),
+      reactions: {},
+      comments: []
+    });
+    if (data.suggestions.length > SUGGEST_MAX) data.suggestions = data.suggestions.slice(-SUGGEST_MAX);
+    writeData(data);
+    res.json({
+      ok: true,
+      message: 'Suggestion submitted.',
+      data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+    });
+  } catch (err) {
+    console.error('/api/suggestions/send error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
+  }
 });
 
 app.post('/api/suggestions/vote', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-  const vote = String(req.body.reaction || '').trim().toLowerCase();
-  if (vote !== 'heart' && vote !== 'dislike') return res.json({ ok: false, error: 'Invalid vote.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const data = readData();
-  const suggestion = (data.suggestions || []).find(s => String(s.id) === String(req.body.suggestionId || ''));
-  if (!suggestion) return res.json({ ok: false, error: 'Suggestion not found.' });
+    const suggestionId = String(getBodyValue(req.body, ['suggestionId', 'id'], '')).trim();
+    const vote = String(getBodyValue(req.body, ['reaction', 'vote', 'type'], '')).trim().toLowerCase();
 
-  voteReactionTarget(suggestion, vote, String(account.accountId || ''));
-  writeData(data);
-  res.json({
-    ok: true,
-    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
-  });
+    if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion id.' });
+    if (vote !== 'heart' && vote !== 'dislike') return res.json({ ok: false, error: 'Invalid vote.' });
+
+    const data = readData();
+    const suggestion = (data.suggestions || []).find(s => String(s.id) === suggestionId);
+    if (!suggestion) return res.json({ ok: false, error: 'Suggestion not found.' });
+
+    voteReactionTarget(suggestion, vote, String(account.accountId || ''));
+    writeData(data);
+    res.json({
+      ok: true,
+      data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+    });
+  } catch (err) {
+    console.error('/api/suggestions/vote error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
+  }
 });
 
 app.post('/api/suggestions/comment', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+  try {
+    const account = currentAccount(req);
+    if (!account) return res.json({ ok: false, error: 'Please log in first.' });
 
-  const suggestionId = String(req.body.suggestionId || '').trim();
-  const parentId = String(req.body.parentId || '').trim();
-  const text = sanitizeText(req.body.text, 240);
-  if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion.' });
-  if (!text) return res.json({ ok: false, error: 'Comment cannot be empty.' });
+    const suggestionId = String(getBodyValue(req.body, ['suggestionId'], '')).trim();
+    const parentId = String(getBodyValue(req.body, ['parentId'], '')).trim();
+    const text = sanitizeText(getBodyValue(req.body, ['text'], ''), 240);
+    if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion.' });
+    if (!text) return res.json({ ok: false, error: 'Comment cannot be empty.' });
 
-  const data = readData();
-  const suggestion = (data.suggestions || []).find(s => String(s.id) === suggestionId);
-  if (!suggestion) return res.json({ ok: false, error: 'Suggestion not found.' });
+    const data = readData();
+    const suggestion = (data.suggestions || []).find(s => String(s.id) === suggestionId);
+    if (!suggestion) return res.json({ ok: false, error: 'Suggestion not found.' });
 
-  const comment = {
-    id: crypto.randomUUID(),
-    parentId: parentId || '',
-    text,
-    username: sanitizeUsername(account.username) || 'Guest',
-    key: String(account.accountId || ''),
-    createdAt: Date.now(),
-    reactions: {},
-    replies: []
-  };
+    const comment = {
+      id: crypto.randomUUID(),
+      parentId: parentId || '',
+      text,
+      username: sanitizeUsername(account.username) || 'Guest',
+      key: String(account.accountId || ''),
+      createdAt: Date.now(),
+      reactions: {},
+      replies: []
+    };
 
-  if (!parentId) {
-    suggestion.comments = Array.isArray(suggestion.comments) ? suggestion.comments : [];
-    suggestion.comments.push(comment);
-  } else {
-    const parent = findSuggestionComment(suggestion.comments || [], parentId);
-    if (!parent) return res.json({ ok: false, error: 'Reply target not found.' });
-    parent.replies = Array.isArray(parent.replies) ? parent.replies : [];
-    parent.replies.push(comment);
+    if (!parentId) {
+      suggestion.comments = Array.isArray(suggestion.comments) ? suggestion.comments : [];
+      suggestion.comments.push(comment);
+    } else {
+      const parent = findSuggestionComment(suggestion.comments || [], parentId);
+      if (!parent) return res.json({ ok: false, error: 'Reply target not found.' });
+      parent.replies = Array.isArray(parent.replies) ? parent.replies : [];
+      parent.replies.push(comment);
+    }
+
+    writeData(data);
+    res.json({
+      ok: true,
+      data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
+    });
+  } catch (err) {
+    console.error('/api/suggestions/comment error:', err);
+    res.status(500).json({ ok: false, error: 'Server error.' });
   }
-
-  writeData(data);
-  res.json({
-    ok: true,
-    data: { categories: SUGGEST_CATEGORIES.slice(), suggestions: (data.suggestions || []).map(s => summarizeSuggestion(s, getAuthAccountId(req))) }
-  });
 });
 
 app.get(['/api/teams', '/api/team-data'], (req, res) => {
