@@ -20,7 +20,7 @@ const CHAT_MAX_MESSAGES = 60;
 const CHAT_TTL_MS = 1000 * 60 * 60 * 24 * 2;
 const REPORT_CATEGORIES = ['Hacker', 'Bug', 'Cheat', 'Other'];
 const REPORT_MAX = 200;
-const SUGGEST_CATEGORIES = ['Gameplay', 'Shop', 'Teams', 'UI', 'Other'];
+const SUGGEST_CATEGORIES = ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'];
 const SUGGEST_MAX = 200;
 const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -1427,40 +1427,57 @@ app.post('/api/cheat', (req, res) => {
 });
 
 const multiplayerState = new Map();
+const MULTIPLAYER_TIMEOUT_MS = 12000;
+
+function snapshotPlayer(player) {
+  return {
+    id: String(player.id || ''),
+    name: String(player.name || 'Duck'),
+    username: String(player.username || player.name || 'Guest'),
+    x: Number(player.x) || 0,
+    y: Number(player.y) || 0,
+    score: Number(player.score) || 0,
+    rot: Number(player.rot) || 0,
+    skin: String(player.skin || 'classic'),
+    alive: player.alive !== false,
+    lastSeen: Number(player.lastSeen || Date.now()) || Date.now()
+  };
+}
+
+function pruneMultiplayerState() {
+  const now = Date.now();
+  for (const [id, player] of multiplayerState.entries()) {
+    if (!player.lastSeen || now - player.lastSeen > MULTIPLAYER_TIMEOUT_MS) {
+      multiplayerState.delete(id);
+      io.emit('player-disconnected', id);
+    }
+  }
+}
+
+setInterval(pruneMultiplayerState, 5000).unref?.();
 
 io.on('connection', (socket) => {
   socket.on('join-game', (payload = {}) => {
-    const player = {
+    const player = snapshotPlayer({
       id: socket.id,
-      name: sanitizeText(payload.name, 16) || 'Duck',
-      username: sanitizeText(payload.username, 16) || sanitizeText(payload.name, 16) || 'Duck',
-      x: Number(payload.x) || 0,
-      y: Number(payload.y) || 0,
-      score: Number(payload.score) || 0,
-      rot: Number(payload.rot) || 0,
-      skin: String(payload.skin || 'classic'),
-      alive: payload.alive !== false
-    };
+      ...payload,
+      lastSeen: Date.now()
+    });
     multiplayerState.set(socket.id, player);
-    socket.emit('current-players', Array.from(multiplayerState.values()).filter(p => p.id !== socket.id));
-    socket.broadcast.emit('player-joined', player);
+    socket.emit('current-players', Array.from(multiplayerState.values()).filter(p => p.id !== socket.id).map(snapshotPlayer));
+    socket.broadcast.emit('player-joined', snapshotPlayer(player));
   });
 
   socket.on('update-position', (payload = {}) => {
     const existing = multiplayerState.get(socket.id) || { id: socket.id };
-    const player = {
+    const player = snapshotPlayer({
       id: socket.id,
-      name: sanitizeText(payload.name || existing.name, 16) || 'Duck',
-      username: sanitizeText(payload.username || existing.username || payload.name, 16) || 'Duck',
-      x: Number(payload.x) || 0,
-      y: Number(payload.y) || 0,
-      score: Number(payload.score) || 0,
-      rot: Number(payload.rot) || 0,
-      skin: String(payload.skin || existing.skin || 'classic'),
-      alive: payload.alive !== false
-    };
+      ...existing,
+      ...payload,
+      lastSeen: Date.now()
+    });
     multiplayerState.set(socket.id, player);
-    socket.broadcast.emit('player-state', player);
+    socket.broadcast.emit('player-state', snapshotPlayer(player));
   });
 
   socket.on('disconnect', () => {
