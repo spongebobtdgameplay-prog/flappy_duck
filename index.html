@@ -2394,6 +2394,8 @@
     let myPlayerKey = '';
     let roomState = null;
     const remotePlayers = new Map();
+    const REMOTE_PLAYER_TIMEOUT_MS = 12000;
+    const REMOTE_PLAYER_DRAW_DISTANCE = 900;
     const gnomes = [];
     let lastDeathReason = 'fell to their death';
     let lastKillerName = '';
@@ -2424,15 +2426,17 @@
     let teamLoading = false;
     let teamOpen = false;
     let reportData = { categories: ['Hacker', 'Bug', 'Cheat', 'Other'], reports: [] };
-    let suggestionData = { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Other'], suggestions: [] };
+    let suggestionData = { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'], suggestions: [] };
     let reportLoading = false;
     let reportOpen = false;
     let reportRequestSeq = 0;
     let suggestionLoading = false;
     let suggestionOpen = false;
     let suggestionRequestSeq = 0;
+    let suggestionVoteSeq = 0;
     let settingsOpen = false;
     let reportVoteBusy = false;
+    let suggestionVoteBusy = false;
     let autoPausedByTab = false;
 
     const CHEAT_CODES = ['duck1', 'duck1000', 'akhira', 'jaiden', 'jaidenisthegoat', 'kevinxbox', 'saifan', 'yessaifan'];
@@ -2546,6 +2550,7 @@
       }
 
       if (!multiplayerPlayers) return;
+      pruneRemotePlayers();
       multiplayerPlayers.innerHTML = '';
 
       const players = Array.from(remotePlayers.values());
@@ -2621,7 +2626,8 @@
             score: Number(player.score) || 0,
             rot: Number(player.rot) || 0,
             skin: String(player.skin || 'classic'),
-            alive: player.alive !== false
+            alive: player.alive !== false,
+            lastSeen: Number(player.lastSeen || Date.now()) || Date.now()
           });
         });
         renderMultiplayerPanel();
@@ -3416,15 +3422,15 @@
 
       google.script.run
         .withSuccessHandler((data) => {
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
           suggestionLoading = false;
-          suggestionData = data || { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Other'], suggestions: [] };
+          suggestionData = data || { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'], suggestions: [] };
           suggestionData.categories = normalizeSuggestionCategories(suggestionData.categories);
           suggestionData.suggestions = normalizeSuggestionList(suggestionData.suggestions);
           renderSuggestionPanel();
         })
         .withFailureHandler((err) => {
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
           suggestionLoading = false;
           console.error(err);
           toastMsg('Could not load suggestions.');
@@ -3465,7 +3471,7 @@
     }
 
     function normalizeSuggestionCategories(categories) {
-      const allowed = ['Gameplay', 'Shop', 'Teams', 'UI', 'Other'];
+      const allowed = ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'];
       const cleaned = [];
       for (const c of (Array.isArray(categories) ? categories : [])) {
         const value = String(c || '').trim();
@@ -3947,6 +3953,36 @@
           toastMsg('Could not update report.');
         })
         .voteReport(reportId, reaction);
+    }
+
+
+    function voteSuggestion(suggestionId, reaction) {
+      if (suggestionVoteBusy) return;
+      suggestionVoteBusy = true;
+      const requestId = ++suggestionVoteSeq;
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          suggestionVoteBusy = false;
+          if (requestId !== suggestionVoteSeq) return;
+
+          if (!res || !res.ok) {
+            toastMsg((res && res.error) ? res.error : 'Could not update suggestion.');
+            return;
+          }
+
+          suggestionData = res.data || suggestionData;
+          suggestionData.categories = normalizeSuggestionCategories(suggestionData.categories);
+          suggestionData.suggestions = normalizeSuggestionList(suggestionData.suggestions);
+          renderSuggestionPanel();
+        })
+        .withFailureHandler((err) => {
+          suggestionVoteBusy = false;
+          if (requestId !== suggestionVoteSeq) return;
+          console.error(err);
+          toastMsg('Could not update suggestion.');
+        })
+        .voteSuggestion(suggestionId, reaction);
     }
 
     function refreshReportLoop() {
@@ -5077,112 +5113,125 @@
       return true;
     }
 
-    function drawDuck() {
-      if (drawDuckSprite()) return;
+    function drawDuckAvatar(x, y, rot, skinId, options = {}) {
+      const skinKey = String(skinId || 'classic');
+      const skin = getSkinColors(skinKey);
+      const img = duckSprites[skinKey];
+      const alphaBase = Number(options.alpha ?? 1);
+      const pulse = Number(options.pulse || 0);
+      const alpha = pulse > 0 ? (Math.sin(time * 30) * 0.25 + 0.75) * alphaBase : alphaBase;
+      const showShield = Boolean(options.showShield);
+      const xShift = Number(options.xShift || 0);
+      const yShift = Number(options.yShift || 0);
+      const scale = Number(options.scale || 1);
 
-      const skin = getSkinColors(duck.skin);
       ctx.save();
-      ctx.translate(duck.x, duck.y);
-      ctx.rotate(duck.rot);
+      ctx.translate(x + xShift, y + yShift);
+      ctx.rotate(rot || 0);
+      ctx.scale(scale, scale);
 
-      const alpha = invuln > 0 ? (Math.sin(time * 30) * 0.25 + 0.75) : 1;
-      ctx.globalAlpha = alpha;
+      if (img && img.complete && img.naturalWidth) {
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(img, -26, -26, 52, 52);
+      } else {
+        ctx.globalAlpha = alpha;
 
-      ctx.globalAlpha *= 0.22;
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.ellipse(6, 13, 22, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.globalAlpha = alpha;
-
-      const bodyGrad = ctx.createLinearGradient(-22, -18, 26, 18);
-      bodyGrad.addColorStop(0, skin.body1);
-      bodyGrad.addColorStop(1, skin.body2);
-
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
-      ctx.beginPath();
-      ctx.ellipse(3, 3, 23, 16, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = bodyGrad;
-      ctx.strokeStyle = skin.outline;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 22, 16, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      const wingGrad = ctx.createLinearGradient(-10, -2, 10, 8);
-      wingGrad.addColorStop(0, skin.wing);
-      wingGrad.addColorStop(1, 'rgba(255,255,255,0.18)');
-      ctx.fillStyle = wingGrad;
-      ctx.beginPath();
-      ctx.ellipse(-4, 2, 8, 6, -0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      const neckGrad = ctx.createLinearGradient(-10, -18, 16, -2);
-      neckGrad.addColorStop(0, skin.body1);
-      neckGrad.addColorStop(1, skin.body2);
-      ctx.fillStyle = neckGrad;
-      ctx.beginPath();
-      ctx.arc(-7, -13, 10, Math.PI * 1.1, Math.PI * 1.95);
-      ctx.quadraticCurveTo(8, -18, 12, -7);
-      ctx.quadraticCurveTo(4, -5, -7, -13);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.beginPath();
-      ctx.arc(-2, -8, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(8, -6, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#111';
-      ctx.beginPath();
-      ctx.arc(9.5, -5.2, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = duck.flapFlash > 0 ? '#ffb347' : skin.beak;
-      ctx.beginPath();
-      ctx.moveTo(14, 0);
-      ctx.lineTo(31, -5);
-      ctx.lineTo(32, 8);
-      ctx.lineTo(14, 5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.strokeStyle = skin.beak;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-7, 14);
-      ctx.lineTo(-13, 20);
-      ctx.moveTo(2, 14);
-      ctx.lineTo(-2, 21);
-      ctx.stroke();
-
-      if (duck.skin === 'xbox') {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-        ctx.lineWidth = 5;
+        ctx.globalAlpha *= 0.22;
+        ctx.fillStyle = '#000';
         ctx.beginPath();
-        ctx.moveTo(-6, -6);
-        ctx.lineTo(5, 5);
-        ctx.moveTo(5, -6);
-        ctx.lineTo(-6, 5);
+        ctx.ellipse(6, 13, 22, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = alpha;
+
+        const bodyGrad = ctx.createLinearGradient(-22, -18, 26, 18);
+        bodyGrad.addColorStop(0, skin.body1);
+        bodyGrad.addColorStop(1, skin.body2);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(3, 3, 23, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = bodyGrad;
+        ctx.strokeStyle = skin.outline;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 22, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.stroke();
-        ctx.restore();
+
+        const wingGrad = ctx.createLinearGradient(-10, -2, 10, 8);
+        wingGrad.addColorStop(0, skin.wing);
+        wingGrad.addColorStop(1, 'rgba(255,255,255,0.18)');
+        ctx.fillStyle = wingGrad;
+        ctx.beginPath();
+        ctx.ellipse(-4, 2, 8, 6, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const neckGrad = ctx.createLinearGradient(-10, -18, 16, -2);
+        neckGrad.addColorStop(0, skin.body1);
+        neckGrad.addColorStop(1, skin.body2);
+        ctx.fillStyle = neckGrad;
+        ctx.beginPath();
+        ctx.arc(-7, -13, 10, Math.PI * 1.1, Math.PI * 1.95);
+        ctx.quadraticCurveTo(8, -18, 12, -7);
+        ctx.quadraticCurveTo(4, -5, -7, -13);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.beginPath();
+        ctx.arc(-2, -8, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(8, -6, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.arc(9.5, -5.2, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = skin.beak;
+        ctx.beginPath();
+        ctx.moveTo(14, 0);
+        ctx.lineTo(31, -5);
+        ctx.lineTo(32, 8);
+        ctx.lineTo(14, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = skin.beak;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-7, 14);
+        ctx.lineTo(-13, 20);
+        ctx.moveTo(2, 14);
+        ctx.lineTo(-2, 21);
+        ctx.stroke();
+
+        if (skinKey === 'xbox') {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(-6, -6);
+          ctx.lineTo(5, 5);
+          ctx.moveTo(5, -6);
+          ctx.lineTo(-6, 5);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
 
-      if (shieldCharges > 0) {
+      if (showShield) {
         ctx.strokeStyle = 'rgba(125,211,252,0.92)';
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -5191,6 +5240,14 @@
       }
 
       ctx.restore();
+    }
+
+    function drawDuck() {
+      drawDuckAvatar(duck.x, duck.y, duck.rot, duck.skin, {
+        alpha: invuln > 0 ? 1 : 1,
+        pulse: invuln > 0 ? 1 : 0,
+        showShield: shieldCharges > 0
+      });
     }
 
     function drawGround() {
@@ -5318,67 +5375,47 @@
       ctx.restore();
     }
 
-    function drawRemoteDuck(p) {
-      if (!p) return;
+    function isRemoteDuckVisible(p) {
+      if (!p) return false;
+      if (p.alive === false) return false;
+      if (typeof p.lastSeen === 'number' && Date.now() - p.lastSeen > REMOTE_PLAYER_TIMEOUT_MS) return false;
 
-      const img = duckSprites[p.skin || 'classic'];
+      const dx = Math.abs((Number(p.x) || 0) - (Number(duck.x) || 0));
+      const dy = Math.abs((Number(p.y) || 0) - (Number(duck.y) || 0));
+      return dx <= REMOTE_PLAYER_DRAW_DISTANCE && dy <= (H + 160);
+    }
 
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot || 0);
+    function pruneRemotePlayers(force = false) {
+      const now = Date.now();
+      let changed = false;
 
-      const alpha = p.alive === false ? 0.45 : 0.78;
-
-      if (img && img.complete && img.naturalWidth) {
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(img, -26, -26, 52, 52);
-      } else {
-        const skin = getSkinColors(p.skin || 'classic');
-        ctx.globalAlpha = alpha;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.22)';
-        ctx.beginPath();
-        ctx.ellipse(6, 13, 22, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = skin.body1;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 24, 18, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = skin.body2;
-        ctx.beginPath();
-        ctx.ellipse(-10, -6, 14, 10, -0.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = skin.beak;
-        ctx.beginPath();
-        ctx.moveTo(14, 0);
-        ctx.lineTo(31, -4);
-        ctx.lineTo(31, 8);
-        ctx.lineTo(14, 5);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(8, -6, 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.arc(9.5, -5.2, 2.2, 0, Math.PI * 2);
-        ctx.fill();
+      for (const [id, player] of remotePlayers.entries()) {
+        const lastSeen = Number(player && player.lastSeen) || 0;
+        if (force || !lastSeen || now - lastSeen > REMOTE_PLAYER_TIMEOUT_MS) {
+          remotePlayers.delete(id);
+          changed = true;
+        }
       }
 
-      ctx.restore();
+      return changed;
+    }
+
+    function drawRemoteDuck(p) {
+      if (!isRemoteDuckVisible(p)) return;
+
+      const alpha = p.alive === false ? 0.45 : 0.82;
+      drawDuckAvatar(Number(p.x) || 0, Number(p.y) || 0, Number(p.rot) || 0, p.skin || 'classic', {
+        alpha,
+        pulse: 0,
+        showShield: false
+      });
 
       ctx.save();
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
       ctx.globalAlpha = p.alive === false ? 0.55 : 1;
       ctx.font = '800 12px system-ui, sans-serif';
-      ctx.fillText(p.username || 'Guest', p.x, p.y - 30);
+      ctx.fillText(p.username || 'Guest', Number(p.x) || 0, (Number(p.y) || 0) - 30);
       ctx.restore();
     }
 
@@ -5403,6 +5440,7 @@
         drawPipe(pipe);
       }
       for (const p of pickups) drawPickup(p);
+      pruneRemotePlayers();
       for (const remote of remotePlayers.values()) drawRemoteDuck(remote);
 
       drawDuck();
@@ -5420,6 +5458,7 @@
         time += dt;
       }
       updateMultiplayerState();
+      pruneRemotePlayers();
       if (multiplayerActive && multiplayerEndTime > Date.now()) {
         roomSyncTimer += dt;
         if (roomSyncTimer >= 0.25) {
