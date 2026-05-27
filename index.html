@@ -2161,17 +2161,17 @@
 
       getLeaderboards: { url: '/api/leaderboards', method: 'GET' },
       getChatMessages: { url: '/api/chat', method: 'GET' },
-      postChatMessage: { url: '/api/chat/send', method: 'POST' },
+      postChatMessage: { url: '/api/chat/send', method: 'POST', encode: (args) => ({ message: String(args[0] || '') }) },
 
       getReportData: { url: '/api/reports', method: 'GET' },
       submitReport: { url: '/api/reports/send', method: 'POST' },
-      voteReport: { url: '/api/reports/vote', method: 'POST' },
+      voteReport: { url: '/api/reports/vote', method: 'POST', encode: (args) => ({ reportId: args[0], reaction: args[1] }) },
       getAccountListForModeration: { url: '/api/moderation/accounts', method: 'GET' },
       banAccountById: { url: '/api/moderation/ban-account', method: 'POST', encode: (args) => ({ accountId: args[0], reason: args[1] }) },
 
       getSuggestionData: { url: '/api/suggestions', method: 'GET' },
       submitSuggestion: { url: '/api/suggestions/send', method: 'POST' },
-      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST' },
+      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST', encode: (args) => ({ suggestionId: args[0], reaction: args[1] }) },
       commentSuggestion: { url: '/api/suggestions/comment', method: 'POST' },
 
       getTeamData: { url: '/api/teams', method: 'GET' },
@@ -3422,7 +3422,7 @@
 
       google.script.run
         .withSuccessHandler((data) => {
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
           suggestionLoading = false;
           suggestionData = data || { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'], suggestions: [] };
           suggestionData.categories = normalizeSuggestionCategories(suggestionData.categories);
@@ -3430,7 +3430,7 @@
           renderSuggestionPanel();
         })
         .withFailureHandler((err) => {
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
           suggestionLoading = false;
           console.error(err);
           toastMsg('Could not load suggestions.');
@@ -5894,7 +5894,8 @@
       google.script.run
         .withSuccessHandler((msgs) => {
           chatLoading = false;
-          if (chatOpen) renderChat(msgs);
+          const list = Array.isArray(msgs) ? msgs : (msgs && Array.isArray(msgs.messages) ? msgs.messages : []);
+          if (chatOpen) renderChat(list);
         })
         .withFailureHandler((err) => {
           chatLoading = false;
@@ -5959,7 +5960,7 @@
           }
 
           chatInput.value = '';
-          renderChat(res.messages || []);
+          renderChat(Array.isArray(res.messages) ? res.messages : (res.messages && Array.isArray(res.messages.messages) ? res.messages.messages : []));
         })
         .withFailureHandler((err) => {
           chatSendPending = false;
@@ -5980,7 +5981,7 @@
             leaderboards = res.leaderboards;
             renderLeaderboards();
           }
-          if (res.chat) renderChat(res.chat);
+          if (res.chat) renderChat(Array.isArray(res.chat) ? res.chat : (res.chat.messages || []));
           if (res.reports) {
             reportData = res.reports;
             reportData.categories = normalizeReportCategories(reportData.categories);
