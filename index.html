@@ -2161,17 +2161,17 @@
 
       getLeaderboards: { url: '/api/leaderboards', method: 'GET' },
       getChatMessages: { url: '/api/chat', method: 'GET' },
-      postChatMessage: { url: '/api/chat/send', method: 'POST', encode: (args) => ({ message: String(args[0] || '') }) },
+      postChatMessage: { url: '/api/chat/send', method: 'POST' },
 
       getReportData: { url: '/api/reports', method: 'GET' },
       submitReport: { url: '/api/reports/send', method: 'POST' },
-      voteReport: { url: '/api/reports/vote', method: 'POST', encode: (args) => ({ reportId: args[0], reaction: args[1] }) },
+      voteReport: { url: '/api/reports/vote', method: 'POST' },
       getAccountListForModeration: { url: '/api/moderation/accounts', method: 'GET' },
       banAccountById: { url: '/api/moderation/ban-account', method: 'POST', encode: (args) => ({ accountId: args[0], reason: args[1] }) },
 
       getSuggestionData: { url: '/api/suggestions', method: 'GET' },
       submitSuggestion: { url: '/api/suggestions/send', method: 'POST' },
-      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST', encode: (args) => ({ suggestionId: args[0], reaction: args[1] }) },
+      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST' },
       commentSuggestion: { url: '/api/suggestions/comment', method: 'POST' },
 
       getTeamData: { url: '/api/teams', method: 'GET' },
@@ -2252,7 +2252,8 @@
         { id: 'shadow', name: 'Shadow Duck', emoji: '🖤', cost: 45, desc: 'Dark, sleek, and intimidating.' },
         { id: 'lava', name: 'Lava Duck', emoji: '🔥', cost: 55, desc: 'Hot streak certified.' },
         { id: 'frozen', name: 'Frozen Duck', emoji: '🧊', cost: 100, desc: 'The coldest duck ever.' },
-        { id: 'xbox', name: 'Xbox Duck', emoji: '🟩', cost: 60, desc: 'Green gradient duck with a bold Xbox X.' }
+        { id: 'xbox', name: 'Xbox Duck', emoji: '🟩', cost: 60, desc: 'Green gradient duck with a bold Xbox X.' },
+        { id: 'gamer', name: 'Gamer Duck', emoji: '🎮', cost: 88, desc: 'Glasses, controller, and multiplayer style.' }
       ],
       boosts: [
         { id: 'shield', name: 'Shield', emoji: '🛡️', cost: 22, desc: 'Survive one crash.' },
@@ -2542,6 +2543,9 @@
     let multiplayerLastEmit = 0;
     let multiplayerJoinSent = false;
 
+    ensurePvpUi();
+
+
     function renderMultiplayerPanel() {
       if (multiplayerStatus) {
         multiplayerStatus.textContent = multiplayerConnected
@@ -2570,22 +2574,25 @@
         empty.className = 'tiny';
         empty.textContent = multiplayerConnected ? 'No other ducks connected yet.' : 'Waiting to connect to the server.';
         multiplayerPlayers.appendChild(empty);
-        return;
+      } else {
+        players.slice(0, 24).forEach((p) => {
+          const row = document.createElement('div');
+          row.className = 'multiplayer-row';
+          row.innerHTML = `
+            <div>
+              <strong>${escapeHtml(p.username || p.name || 'Guest')}</strong>
+              <div class="tiny">Score ${Number(p.score || 0)} · ${p.alive === false ? 'Spectating' : 'Flying'}</div>
+            </div>
+            <div><span class="team-chip">${escapeHtml(String(p.id || '').slice(0, 6) || 'player')}</span></div>
+          `;
+          multiplayerPlayers.appendChild(row);
+        });
       }
 
-      players.slice(0, 24).forEach((p) => {
-        const row = document.createElement('div');
-        row.className = 'multiplayer-row';
-        row.innerHTML = `
-          <div>
-            <strong>${escapeHtml(p.username || p.name || 'Guest')}</strong>
-            <div class="tiny">Score ${Number(p.score || 0)} · ${p.alive === false ? 'Spectating' : 'Flying'}</div>
-          </div>
-          <div><span class="team-chip">${escapeHtml(String(p.id || '').slice(0, 6) || 'player')}</span></div>
-        `;
-        multiplayerPlayers.appendChild(row);
-      });
+      if (typeof renderPvpLobby === 'function') renderPvpLobby();
+      if (typeof renderPvpHud === 'function') renderPvpHud();
     }
+
 
     function setupMultiplayerSocket() {
       if (multiplayerSocket || typeof io !== 'function') return;
@@ -2627,7 +2634,10 @@
             rot: Number(player.rot) || 0,
             skin: String(player.skin || 'classic'),
             alive: player.alive !== false,
-            lastSeen: Number(player.lastSeen || Date.now()) || Date.now()
+            lastSeen: Number(player.lastSeen || Date.now()) || Date.now(),
+            roomId: String(player.roomId || player.pvpRoomId || ''),
+            pvpMode: String(player.pvpMode || ''),
+            pvpActive: Boolean(player.pvpActive)
           });
         });
         renderMultiplayerPanel();
@@ -2644,7 +2654,10 @@
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
-          alive: player.alive !== false
+          alive: player.alive !== false,
+          roomId: String(player.roomId || player.pvpRoomId || ''),
+          pvpMode: String(player.pvpMode || ''),
+          pvpActive: Boolean(player.pvpActive)
         });
         renderMultiplayerPanel();
       });
@@ -2660,13 +2673,44 @@
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
-          alive: player.alive !== false
+          alive: player.alive !== false,
+          roomId: String(player.roomId || player.pvpRoomId || ''),
+          pvpMode: String(player.pvpMode || ''),
+          pvpActive: Boolean(player.pvpActive)
         });
       });
 
       multiplayerSocket.on('player-disconnected', (id) => {
         remotePlayers.delete(String(id || ''));
         renderMultiplayerPanel();
+      });
+
+      multiplayerSocket.on('pvp-invite', (packet) => {
+        if (!packet || blockPvpRequests) {
+          if (packet && packet.roomId) {
+            multiplayerSocket.emit('pvp-invite-response', { roomId: packet.roomId, accept: false, blocked: true });
+          }
+          return;
+        }
+        openPvpInvite(packet);
+      });
+
+      multiplayerSocket.on('pvp-room-state', (room) => {
+        updatePvpFromRemoteState(room);
+      });
+
+      multiplayerSocket.on('pvp-match-start', (room) => {
+        startPvpMatchLocal(room);
+      });
+
+      multiplayerSocket.on('pvp-match-end', (result) => {
+        endPvpMatchLocal(result);
+      });
+
+      multiplayerSocket.on('pvp-request-declined', (payload) => {
+        if (payload && String(payload.hostId || '') === String(multiplayerSocket.id || '')) {
+          toastMsg(`${payload.username || 'A player'} declined the PVP request.`);
+        }
       });
     }
 
@@ -2681,7 +2725,11 @@
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
-        alive: state !== 'gameover'
+        alive: state !== 'gameover',
+        pvpRoomId: pvpRoom && pvpRoom.id ? String(pvpRoom.id) : '',
+        pvpMode: pvpMode,
+        pvpActive: Boolean(pvpMatchActive),
+        pvpEndsAt: Number(pvpMatchEndsAt || 0)
       });
     }
 
@@ -2699,7 +2747,11 @@
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
-        alive: state !== 'gameover'
+        alive: state !== 'gameover',
+        pvpRoomId: pvpRoom && pvpRoom.id ? String(pvpRoom.id) : '',
+        pvpMode: pvpMode,
+        pvpActive: Boolean(pvpMatchActive),
+        pvpEndsAt: Number(pvpMatchEndsAt || 0)
       };
 
       if (!multiplayerJoinSent) {
@@ -3422,7 +3474,7 @@
 
       google.script.run
         .withSuccessHandler((data) => {
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
           suggestionLoading = false;
           suggestionData = data || { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'], suggestions: [] };
           suggestionData.categories = normalizeSuggestionCategories(suggestionData.categories);
@@ -3430,7 +3482,7 @@
           renderSuggestionPanel();
         })
         .withFailureHandler((err) => {
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
           suggestionLoading = false;
           console.error(err);
           toastMsg('Could not load suggestions.');
@@ -4189,6 +4241,12 @@
     function updateMultiplayerTimerText() {
       if (!multiText) return;
 
+      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > Date.now()) {
+        const leftMs = Math.max(0, Number(pvpMatchEndsAt || 0) - Date.now());
+        multiText.textContent = `PVP ${formatLongTimer_(leftMs)}`;
+        return;
+      }
+
       if (multiplayerConnected) {
         multiText.textContent = 'LIVE';
         return;
@@ -4209,6 +4267,7 @@
       shieldText.textContent = shieldCharges;
       nameText.textContent = playerName || 'Guest';
       updateMultiplayerTimerText();
+      if (typeof renderPvpHud === 'function') renderPvpHud();
     }
 
     function updateMultiplayerState() {
@@ -4219,6 +4278,10 @@
         toastMsg('⌛ Multiplayer expired got it?.');
         renderShop();
         persistGameData(true);
+      }
+      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > 0 && Date.now() >= Number(pvpMatchEndsAt || 0)) {
+        pvpMatchActive = false;
+        renderPvpHud();
       }
     }
 
@@ -5092,6 +5155,8 @@
           return { body1: '#a5f3fc', body2: '#38bdf8', wing: '#e0f2fe', beak: '#60a5fa', outline: '#0f172a' };
         case 'xbox':
           return { body1: '#0b7a2a', body2: '#49d16d', wing: '#b7ffd0', beak: '#d9ffe8', outline: '#063012' };
+        case 'gamer':
+          return { body1: '#374151', body2: '#111827', wing: '#60a5fa', beak: '#fbbf24', outline: '#e5e7eb' };
         default:
           return { body1: '#fff86a', body2: '#ffd400', wing: '#f5c400', beak: '#ff7a00', outline: '#222' };
       }
@@ -5227,6 +5292,39 @@
           ctx.moveTo(5, -6);
           ctx.lineTo(-6, 5);
           ctx.stroke();
+          ctx.restore();
+        }
+
+        if (skinKey === 'gamer') {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.roundRect?.(-15, -11, 32, 16, 7);
+          if (!ctx.roundRect) {
+            ctx.rect(-15, -11, 32, 16);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(-2, -3);
+          ctx.lineTo(10, -3);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(17,24,39,0.96)';
+          ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect?.(12, 10, 17, 12, 5);
+          if (!ctx.roundRect) {
+            ctx.rect(12, 10, 17, 12);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillRect(18, 13, 5, 2);
+          ctx.fillRect(20, 11, 2, 6);
           ctx.restore();
         }
       }
@@ -5380,6 +5478,10 @@
       if (p.alive === false) return false;
       if (typeof p.lastSeen === 'number' && Date.now() - p.lastSeen > REMOTE_PLAYER_TIMEOUT_MS) return false;
 
+      if (pvpMatchActive && pvpRoom && pvpRoom.id) {
+        const sameRoom = String(p.roomId || '') === String(pvpRoom.id || '');
+        if (!sameRoom) return false;
+      }
       const dx = Math.abs((Number(p.x) || 0) - (Number(duck.x) || 0));
       const dy = Math.abs((Number(p.y) || 0) - (Number(duck.y) || 0));
       return dx <= REMOTE_PLAYER_DRAW_DISTANCE && dy <= (H + 160);
@@ -5894,8 +5996,7 @@
       google.script.run
         .withSuccessHandler((msgs) => {
           chatLoading = false;
-          const list = Array.isArray(msgs) ? msgs : (msgs && Array.isArray(msgs.messages) ? msgs.messages : []);
-          if (chatOpen) renderChat(list);
+          if (chatOpen) renderChat(msgs);
         })
         .withFailureHandler((err) => {
           chatLoading = false;
@@ -5960,7 +6061,7 @@
           }
 
           chatInput.value = '';
-          renderChat(Array.isArray(res.messages) ? res.messages : (res.messages && Array.isArray(res.messages.messages) ? res.messages.messages : []));
+          renderChat(res.messages || []);
         })
         .withFailureHandler((err) => {
           chatSendPending = false;
@@ -5981,7 +6082,7 @@
             leaderboards = res.leaderboards;
             renderLeaderboards();
           }
-          if (res.chat) renderChat(Array.isArray(res.chat) ? res.chat : (res.chat.messages || []));
+          if (res.chat) renderChat(res.chat);
           if (res.reports) {
             reportData = res.reports;
             reportData.categories = normalizeReportCategories(reportData.categories);
