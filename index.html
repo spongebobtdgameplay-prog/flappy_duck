@@ -1254,235 +1254,6 @@
       border-color: rgba(96,165,250,0.34);
     }
 
-    .report-react.active-like,
-    .report-react.active-heart,
-    .suggest-toggle.active-like,
-    .suggest-toggle.active-heart {
-      background: linear-gradient(180deg, rgba(239,68,68,0.36), rgba(239,68,68,0.18));
-      border-color: rgba(248,113,113,0.52);
-      box-shadow: 0 10px 28px rgba(239,68,68,0.18);
-    }
-
-    .pvp-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 13;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.54);
-      backdrop-filter: blur(10px);
-      padding: 18px;
-      pointer-events: auto;
-    }
-
-    .pvp-backdrop.open { display: flex; }
-
-    .pvp-sheet {
-      width: min(1180px, 96vw);
-      max-height: 92vh;
-      overflow: auto;
-      border-radius: 30px;
-      background: linear-gradient(180deg, rgba(12, 18, 34, 0.98), rgba(9, 14, 26, 0.96));
-      border: 1px solid rgba(255,255,255,0.10);
-      box-shadow: var(--shadow), var(--glow);
-      padding: 18px;
-      position: relative;
-    }
-
-    .pvp-sheet::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 30px;
-      pointer-events: none;
-      background: radial-gradient(circle at top left, rgba(251,191,36,0.10), transparent 34%), radial-gradient(circle at top right, rgba(96,165,250,0.10), transparent 34%);
-    }
-
-    .pvp-head,
-    .pvp-grid {
-      position: relative;
-      z-index: 1;
-    }
-
-    .pvp-grid {
-      display: grid;
-      grid-template-columns: 0.95fr 1.05fr;
-      gap: 14px;
-    }
-
-    .pvp-form {
-      display: grid;
-      gap: 10px;
-    }
-
-    .pvp-inline {
-      display: grid;
-      gap: 8px;
-    }
-
-    .pvp-mode-row {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .pvp-mode-btn {
-      border-radius: 16px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.12);
-      font-weight: 900;
-    }
-
-    .pvp-mode-btn.active {
-      background: linear-gradient(180deg, rgba(251,191,36,0.32), rgba(251,191,36,0.14));
-      border-color: rgba(251,191,36,0.42);
-      color: #fff;
-    }
-
-    .pvp-range-wrap {
-      display: grid;
-      gap: 6px;
-    }
-
-    .pvp-range-wrap input[type="range"] {
-      width: 100%;
-    }
-
-    .pvp-room-info {
-      display: grid;
-      gap: 8px;
-    }
-
-    .pvp-room-card {
-      padding: 12px;
-      border-radius: 18px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.10);
-    }
-
-    .pvp-room-card strong {
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .pvp-room-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .pvp-hud {
-      position: fixed;
-      left: 50%;
-      top: calc(var(--topbar-h) + 12px);
-      transform: translateX(-50%);
-      width: min(560px, 94vw);
-      z-index: 12;
-      pointer-events: none;
-      display: none;
-    }
-
-    .pvp-hud.open { display: block; }
-
-    .pvp-hud-card {
-      padding: 12px 14px;
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(12,18,34,0.98), rgba(9,14,26,0.94));
-      border: 1px solid rgba(255,255,255,0.10);
-      box-shadow: var(--shadow-soft), var(--glow);
-    }
-
-    .pvp-hud-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      font-weight: 900;
-      margin-bottom: 8px;
-    }
-
-    .pvp-hud-board {
-      display: grid;
-      gap: 6px;
-    }
-
-    .pvp-hud-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      align-items: center;
-      padding: 8px 10px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .pvp-invite-card {
-      position: fixed;
-      left: 14px;
-      top: calc(var(--topbar-h) + 14px);
-      width: min(420px, 92vw);
-      z-index: 14;
-      pointer-events: auto;
-      padding: 14px;
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(12,18,34,0.98), rgba(9,14,26,0.95));
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: var(--shadow), var(--glow);
-      transform: translateX(-130%);
-      opacity: 0;
-      transition: transform 0.28s ease, opacity 0.28s ease;
-    }
-
-    .pvp-invite-card.open {
-      transform: translateX(0);
-      opacity: 1;
-    }
-
-    .pvp-invite-title {
-      font-weight: 900;
-      font-size: 1.02rem;
-      margin-bottom: 4px;
-    }
-
-    .pvp-invite-text {
-      color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.35;
-      margin-bottom: 10px;
-    }
-
-    .pvp-invite-actions {
-      justify-content: flex-start;
-    }
-
-    .settings-toggle {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.06);
-      font-weight: 900;
-      user-select: none;
-    }
-
-    .settings-toggle input {
-      width: 18px;
-      height: 18px;
-      accent-color: #fbbf24;
-    }
-
-    .settings-toggle .tiny {
-      margin: 0;
-    }
-
     .report-empty {
       color: var(--muted);
       font-size: 0.92rem;
@@ -1854,6 +1625,214 @@
       word-break: break-word;
     }
 
+
+    .auth-text-btn {
+      background: linear-gradient(180deg, #ffe066, #fbbf24);
+      color: #111827;
+      border: 0;
+      box-shadow: 0 10px 28px rgba(251, 191, 36, 0.24), 0 0 0 1px rgba(255,255,255,0.10);
+      font-weight: 900;
+    }
+
+    .auth-text-btn:hover {
+      filter: brightness(1.03);
+    }
+
+    .pvp-button {
+      background: linear-gradient(180deg, #8b5cf6, #6366f1);
+      color: #fff;
+      box-shadow: 0 10px 28px rgba(99, 102, 241, 0.24), 0 0 0 1px rgba(255,255,255,0.10);
+    }
+
+    .pvp-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 13;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      background: rgba(0, 0, 0, 0.56);
+      backdrop-filter: blur(10px);
+      overflow: hidden;
+      padding: 18px;
+    }
+
+    .pvp-backdrop.open { display: flex; }
+
+    .pvp-sheet {
+      width: min(980px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      border-radius: 30px;
+      background: linear-gradient(180deg, rgba(12, 18, 34, 0.98), rgba(9, 14, 26, 0.96));
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: var(--shadow), var(--glow);
+      padding: 18px;
+      position: relative;
+      display: grid;
+      gap: 14px;
+    }
+
+    .pvp-sheet::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 30px;
+      pointer-events: none;
+      background: radial-gradient(circle at top left, rgba(168,85,247,0.12), transparent 34%), radial-gradient(circle at top right, rgba(96,165,250,0.10), transparent 34%);
+    }
+
+    .pvp-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .pvp-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.10);
+    }
+
+    .pvp-panel h3 {
+      margin: 0;
+      font-size: 1.04rem;
+    }
+
+    .pvp-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .pvp-live-hud {
+      position: fixed;
+      left: 14px;
+      top: calc(var(--topbar-h) + 12px);
+      width: min(420px, 92vw);
+      z-index: 12;
+      display: grid;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .pvp-live-hud.hidden {
+      display: none;
+    }
+
+    .pvp-live-card {
+      pointer-events: auto;
+      padding: 12px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(12,18,34,0.96), rgba(9,14,26,0.94));
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    }
+
+    .pvp-live-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pvp-live-title {
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .pvp-live-timer {
+      font-weight: 900;
+      color: #fbbf24;
+    }
+
+    .pvp-live-board {
+      display: grid;
+      gap: 6px;
+    }
+
+    .pvp-live-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .pvp-live-rank {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.12);
+      font-weight: 900;
+    }
+
+    .pvp-invite {
+      position: fixed;
+      top: calc(var(--topbar-h) + 14px);
+      left: -460px;
+      z-index: 14;
+      width: min(420px, 92vw);
+      padding: 14px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(12,18,34,0.98), rgba(9,14,26,0.96));
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: var(--shadow), var(--glow);
+      transition: left 0.34s ease;
+      pointer-events: auto;
+    }
+
+    .pvp-invite.show {
+      left: 14px;
+    }
+
+    .pvp-invite h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+
+    .pvp-invite .tiny {
+      margin-bottom: 10px;
+    }
+
+    .settings-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    .settings-checkbox input {
+      width: 18px;
+      height: 18px;
+      accent-color: #fbbf24;
+    }
+
+    @media (max-width: 900px) {
+      .pvp-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
   </style>
 </head>
 <body data-theme="day">
@@ -1877,7 +1856,7 @@
         <button id="teamWarsBtn" class="btn-secondary" type="button">Team Wars</button>
         <button id="eventsBtn" class="btn-secondary" type="button">Events</button>
         <button id="multiplayerBtn" class="btn-secondary" type="button">Multiplayer</button>
-        <button id="pvpBtn" class="btn-primary" type="button">PVP</button>
+        <button id="pvpBtn" class="pvp-button" type="button">PvP</button>
         <button id="reportBtn" class="btn-secondary" type="button">Reports</button>
         <button id="suggestBtn" class="btn-secondary" type="button">Suggestions</button>
         <button id="shopBtn" class="btn-primary" type="button">Shop</button>
@@ -1980,8 +1959,8 @@
         <input id="accountPassInput" class="name-input" type="password" maxlength="32" placeholder="Password" />
         <div id="accountError" class="name-error"></div>
         <div class="buttons" style="justify-content:flex-end; margin-top:12px;">
-          <button id="createAccountBtn" class="btn-primary" type="button">Create Account</button>
-          <button id="doLoginBtn" class="btn-secondary" type="button">Login</button>
+          <button id="createAccountBtn" class="auth-text-btn" type="button">Sign Up</button>
+          <button id="doLoginBtn" class="auth-text-btn" type="button">Log In</button>
         </div>
       </div>
     </div>
@@ -2007,20 +1986,16 @@
               <button id="settingsLogoutBtn" class="btn-secondary" type="button">Logout</button>
               <button id="settingsDeleteBtn" class="btn-primary" type="button">Delete Account</button>
             </div>
+            <label class="settings-checkbox" style="margin-top:10px;">
+              <input id="blockPvpRequestsToggle" type="checkbox" />
+              Block PvP Requests
+            </label>
             <div id="deleteConfirmBox" class="settings-confirm hidden">
               <div class="settings-confirm-title">Are You Sure you wont to delete this account</div>
               <div class="tiny">This action cannot be undone.</div>
               <div class="buttons settings-confirm-actions">
                 <button id="deleteYesBtn" class="btn-primary" type="button">Yes</button>
                 <button id="deleteNoBtn" class="btn-secondary" type="button">No</button>
-              </div>
-            </div>
-
-            <div class="settings-toggle">
-              <input id="settingsBlockPvpToggle" type="checkbox" />
-              <div>
-                <div>Block PvP Requests</div>
-                <div class="tiny">Automatically decline incoming PvP requests.</div>
               </div>
             </div>
           </div>
@@ -2257,12 +2232,13 @@
       </div>
     </div>
 
+
     <div id="pvpBackdrop" class="pvp-backdrop" aria-hidden="true">
       <div class="pvp-sheet">
-        <div class="shop-head pvp-head">
+        <div class="shop-head">
           <div>
-            <h2>PvP</h2>
-            <div class="tiny">Challenge up to 5 players. Easy, normal, hard, and impossible.</div>
+            <h2>PvP Arena</h2>
+            <div class="tiny">Invite a player, set the mode, and start the match. The live timer updates every second.</div>
           </div>
           <div class="buttons">
             <button id="closePvpBtn" class="btn-secondary" type="button">Close</button>
@@ -2270,57 +2246,60 @@
         </div>
 
         <div class="pvp-grid">
-          <div class="panel">
-            <h3>Request a match</h3>
-            <div class="pvp-form">
-              <input id="pvpTargetInput" class="name-input" type="text" maxlength="120" placeholder="Player usernames, comma separated" />
-              <div class="pvp-inline">
-                <div class="tiny">Mode</div>
-                <div class="pvp-mode-row">
-                  <button type="button" class="pvp-mode-btn" data-pvp-mode="easy">Easy</button>
-                  <button type="button" class="pvp-mode-btn" data-pvp-mode="normal">Normal</button>
-                  <button type="button" class="pvp-mode-btn" data-pvp-mode="hard">Hard</button>
-                  <button type="button" class="pvp-mode-btn" data-pvp-mode="impossible">Impossible</button>
-                </div>
-              </div>
+          <div class="pvp-panel">
+            <h3>Host lobby</h3>
+            <div class="tiny">Select a player, choose difficulty, and pick match length.</div>
 
-              <div class="pvp-range-wrap">
-                <div class="tiny">Match time: <span id="pvpDurationLabel">60s</span></div>
-                <input id="pvpDurationInput" type="range" min="20" max="600" step="5" value="60" />
-                <input id="pvpDurationValue" class="name-input" type="number" min="20" max="600" value="60" />
-              </div>
-
-              <div class="pvp-room-actions">
-                <button id="pvpRequestBtn" class="btn-primary" type="button">Request PvP</button>
-                <button id="pvpStartBtn" class="btn-good" type="button">Start Match</button>
-                <button id="pvpLeaveBtn" class="btn-secondary" type="button">Leave PvP</button>
-              </div>
-
-              <div class="tiny">The host can invite up to 4 other players. The match reward depends on mode.</div>
+            <div class="pvp-row">
+              <input id="pvpTargetInput" class="name-input" type="text" maxlength="16" placeholder="Player username" />
+              <select id="pvpModeSelect" class="name-input">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+                <option value="impossible">Impossible</option>
+              </select>
             </div>
+
+            <div class="pvp-row">
+              <input id="pvpDurationInput" type="range" min="20" max="600" step="1" value="60" style="width:100%;" />
+            </div>
+            <div id="pvpDurationLabel" class="tiny">60 seconds</div>
+
+            <div class="pvp-row">
+              <button id="sendPvpInviteBtn" class="btn-primary" type="button">Send PvP Invite</button>
+              <button id="startPvpBtn" class="btn-good" type="button">Start Match</button>
+            </div>
+
+            <div class="tiny">Rewards: Easy 10 coins, Normal 20, Hard 35, Impossible 50. Match length is capped from 20 seconds to 10 minutes.</div>
           </div>
 
-          <div class="panel">
-            <h3>Room</h3>
-            <div id="pvpRoomInfo" class="pvp-room-info"></div>
-            <div style="height:12px"></div>
-            <h3>Scoreboard</h3>
-            <div id="pvpScoreboard" class="leader-list"></div>
+          <div class="pvp-panel">
+            <h3>Players in room</h3>
+            <div id="pvpRoomPlayers" class="multiplayer-list"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="pvpInviteCard" class="pvp-invite-card" aria-hidden="true">
-      <div class="pvp-invite-title">PvP request</div>
-      <div class="pvp-invite-text">Someone wants to fight.</div>
-      <div class="buttons pvp-invite-actions">
-        <button id="pvpInviteYesBtn" class="btn-good" type="button">Yes</button>
+    <div id="pvpInvitePanel" class="pvp-invite" aria-hidden="true">
+      <h3 id="pvpInviteTitle">PvP Invite</h3>
+      <div id="pvpInviteBody" class="tiny">Someone invited you to a PvP match.</div>
+      <div class="buttons" style="justify-content:flex-end;">
         <button id="pvpInviteNoBtn" class="btn-secondary" type="button">No</button>
+        <button id="pvpInviteYesBtn" class="btn-primary" type="button">Yes</button>
       </div>
     </div>
 
-    <div id="pvpHud" class="pvp-hud" aria-hidden="true"></div>
+    <div id="pvpLiveHud" class="pvp-live-hud hidden" aria-hidden="true">
+      <div class="pvp-live-card">
+        <div class="pvp-live-top">
+          <div class="pvp-live-title">PvP Live</div>
+          <div class="pvp-live-timer" id="pvpLiveTimer">00:00</div>
+        </div>
+        <div id="pvpLiveMeta" class="tiny">Waiting for match start.</div>
+        <div id="pvpLiveBoard" class="pvp-live-board"></div>
+      </div>
+    </div>
 
     <div id="difficultyBackdrop" class="difficulty-backdrop" aria-hidden="true">
       <div class="difficulty-sheet">
@@ -2448,21 +2427,22 @@
     const pvpBackdrop = document.getElementById('pvpBackdrop');
     const closePvpBtn = document.getElementById('closePvpBtn');
     const pvpTargetInput = document.getElementById('pvpTargetInput');
-    const pvpModeButtons = Array.from(document.querySelectorAll('[data-pvp-mode]'));
+    const pvpModeSelect = document.getElementById('pvpModeSelect');
     const pvpDurationInput = document.getElementById('pvpDurationInput');
-    const pvpDurationValue = document.getElementById('pvpDurationValue');
     const pvpDurationLabel = document.getElementById('pvpDurationLabel');
-    const pvpRequestBtn = document.getElementById('pvpRequestBtn');
-    const pvpStartBtn = document.getElementById('pvpStartBtn');
-    const pvpLeaveBtn = document.getElementById('pvpLeaveBtn');
-    const pvpRoomInfo = document.getElementById('pvpRoomInfo');
-    const pvpScoreboard = document.getElementById('pvpScoreboard');
-    const pvpInviteCard = document.getElementById('pvpInviteCard');
-    const pvpInviteText = pvpInviteCard ? pvpInviteCard.querySelector('.pvp-invite-text') : null;
-    const pvpInviteYesBtn = document.getElementById('pvpInviteYesBtn');
+    const sendPvpInviteBtn = document.getElementById('sendPvpInviteBtn');
+    const startPvpBtn = document.getElementById('startPvpBtn');
+    const pvpRoomPlayers = document.getElementById('pvpRoomPlayers');
+    const pvpInvitePanel = document.getElementById('pvpInvitePanel');
+    const pvpInviteTitle = document.getElementById('pvpInviteTitle');
+    const pvpInviteBody = document.getElementById('pvpInviteBody');
     const pvpInviteNoBtn = document.getElementById('pvpInviteNoBtn');
-    const pvpHud = document.getElementById('pvpHud');
-    const settingsBlockPvpToggle = document.getElementById('settingsBlockPvpToggle');
+    const pvpInviteYesBtn = document.getElementById('pvpInviteYesBtn');
+    const pvpLiveHud = document.getElementById('pvpLiveHud');
+    const pvpLiveTimer = document.getElementById('pvpLiveTimer');
+    const pvpLiveMeta = document.getElementById('pvpLiveMeta');
+    const pvpLiveBoard = document.getElementById('pvpLiveBoard');
+    const blockPvpRequestsToggle = document.getElementById('blockPvpRequestsToggle');
 
     const coinList = document.getElementById('coinList');
     const toast = document.getElementById('toast');
@@ -2575,8 +2555,7 @@
         { id: 'lava', name: 'Lava Duck', emoji: '🔥', cost: 55, desc: 'Hot streak certified.' },
         { id: 'frozen', name: 'Frozen Duck', emoji: '🧊', cost: 100, desc: 'The coldest duck ever.' },
         { id: 'xbox', name: 'Xbox Duck', emoji: '🟩', cost: 60, desc: 'Green gradient duck with a bold Xbox X.' },
-        { id: 'gamer', name: 'Gamer Duck', emoji: '🎮', cost: 88, desc: 'Glasses, controller, and multiplayer style.' },
-        { id: 'multiplayer', name: 'Multiplayer Duck', emoji: '🕹️', cost: 120, desc: 'A controller duck with glasses made for PvP.' }
+        { id: 'multiplayer', name: 'Multiplayer Duck', emoji: '🎮', cost: 80, desc: 'Cool duck with glasses and a gaming controller.' }
       ],
       boosts: [
         { id: 'shield', name: 'Shield', emoji: '🛡️', cost: 22, desc: 'Survive one crash.' },
@@ -2762,6 +2741,10 @@
     let reportVoteBusy = false;
     let suggestionVoteBusy = false;
     let autoPausedByTab = false;
+    let blockPvpRequests = false;
+    let pvpMatchState = null;
+    let pvpHudTimer = null;
+    let pvpInviteState = null;
 
     const CHEAT_CODES = ['duck1', 'duck1000', 'akhira', 'jaiden', 'jaidenisthegoat', 'kevinxbox', 'saifan', 'yessaifan'];
     let cheatBuffer = '';
@@ -2866,366 +2849,6 @@
     let multiplayerLastEmit = 0;
     let multiplayerJoinSent = false;
 
-    let pvpRoom = null;
-    let pvpMode = 'normal';
-    let pvpMatchActive = false;
-    let pvpMatchEndsAt = 0;
-    let pvpInvitePacket = null;
-    let blockPvpRequests = false;
-    let pvpUiBound = false;
-
-    function normalizePvpMode(mode) {
-      const clean = String(mode || 'normal').trim().toLowerCase();
-      return ['easy', 'normal', 'hard', 'impossible'].includes(clean) ? clean : 'normal';
-    }
-
-    function pvpModeLabel(mode) {
-      return ({ easy: 'Easy', normal: 'Normal', hard: 'Hard', impossible: 'Impossible' })[normalizePvpMode(mode)] || 'Normal';
-    }
-
-    function pvpRewardForMode(mode) {
-      return ({ easy: 10, normal: 20, hard: 35, impossible: 50 })[normalizePvpMode(mode)] || 20;
-    }
-
-    function clampPvpDurationSec(v) {
-      const n = Math.max(20, Math.min(600, Math.round(Number(v) || 60)));
-      return n;
-    }
-
-    function getPvpPlayers() {
-      if (!pvpRoom || !Array.isArray(pvpRoom.players)) return [];
-      return pvpRoom.players.slice().sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
-    }
-
-    function updatePvpControlsUi() {
-      if (pvpModeButtons.length) {
-        pvpModeButtons.forEach((btn) => {
-          const mode = normalizePvpMode(btn.dataset.pvpMode);
-          btn.classList.toggle('active', mode === pvpMode);
-        });
-      }
-      if (pvpDurationInput) pvpDurationInput.value = String(clampPvpDurationSec(pvpDurationInput.value || 60));
-      if (pvpDurationValue) pvpDurationValue.value = String(clampPvpDurationSec(pvpDurationValue ? pvpDurationValue.value : 60));
-      if (pvpDurationLabel) pvpDurationLabel.textContent = `${clampPvpDurationSec(pvpDurationInput ? pvpDurationInput.value : 60)}s`;
-      if (settingsBlockPvpToggle) settingsBlockPvpToggle.checked = Boolean(blockPvpRequests);
-    }
-
-    function ensurePvpUi() {
-      if (pvpUiBound) return;
-      pvpUiBound = true;
-
-      if (pvpModeButtons.length) {
-        pvpModeButtons.forEach((btn) => {
-          btn.addEventListener('click', () => {
-            pvpMode = normalizePvpMode(btn.dataset.pvpMode);
-            updatePvpControlsUi();
-            renderPvpLobby();
-          });
-        });
-      }
-
-      if (pvpDurationInput) {
-        pvpDurationInput.addEventListener('input', () => {
-          const sec = clampPvpDurationSec(pvpDurationInput.value);
-          pvpDurationValue.value = String(sec);
-          pvpDurationLabel.textContent = `${sec}s`;
-        });
-      }
-
-      if (pvpDurationValue) {
-        pvpDurationValue.addEventListener('input', () => {
-          const sec = clampPvpDurationSec(pvpDurationValue.value);
-          pvpDurationInput.value = String(sec);
-          pvpDurationLabel.textContent = `${sec}s`;
-        });
-      }
-
-      if (settingsBlockPvpToggle) {
-        settingsBlockPvpToggle.addEventListener('change', () => {
-          blockPvpRequests = Boolean(settingsBlockPvpToggle.checked);
-          toastMsg(blockPvpRequests ? 'PvP requests blocked.' : 'PvP requests enabled.');
-          persistGameData(true);
-        });
-      }
-
-      updatePvpControlsUi();
-    }
-
-
-    function setPvpInviteVisible(open) {
-      if (!pvpInviteCard) return;
-      pvpInviteCard.classList.toggle('open', Boolean(open));
-      pvpInviteCard.setAttribute('aria-hidden', open ? 'false' : 'true');
-    }
-
-    function closePvpInvite() {
-      pvpInvitePacket = null;
-      setPvpInviteVisible(false);
-    }
-
-    function respondToPvpInvite(accept) {
-      if (!multiplayerSocket || !pvpInvitePacket) return;
-      const roomId = String(pvpInvitePacket.roomId || '');
-      const payload = { roomId, accept: Boolean(accept), blocked: false };
-      multiplayerSocket.emit('pvp-response', payload);
-      multiplayerSocket.emit('pvp-invite-response', payload);
-      if (accept) {
-        toastMsg('PvP accepted.');
-      } else {
-        toastMsg('PvP declined.');
-      }
-      closePvpInvite();
-    }
-
-    function openPvpInvite(packet) {
-      if (!packet) return;
-      pvpInvitePacket = {
-        roomId: String(packet.roomId || ''),
-        hostSocketId: String(packet.hostSocketId || packet.hostId || ''),
-        hostUsername: String(packet.hostUsername || packet.username || 'Player'),
-        mode: normalizePvpMode(packet.mode || 'normal'),
-        durationMs: clampPvpDurationSec((Number(packet.durationMs || 60000) / 1000) || 60) * 1000
-      };
-      if (pvpInviteText) {
-        pvpInviteText.textContent = `${pvpInvitePacket.hostUsername} wants a PvP match. Mode: ${pvpModeLabel(pvpInvitePacket.mode)} · Time: ${clampPvpDurationSec((pvpInvitePacket.durationMs || 60000) / 1000)}s`;
-      }
-      setPvpInviteVisible(true);
-    }
-
-    function updatePvpFromRemoteState(room) {
-      if (!room) {
-        if (!pvpMatchActive) pvpRoom = null;
-        renderPvpLobby();
-        renderPvpHud();
-        return;
-      }
-
-      pvpRoom = {
-        id: String(room.id || room.roomId || ''),
-        hostSocketId: String(room.hostSocketId || room.hostId || ''),
-        hostUsername: String(room.hostUsername || room.hostName || 'Host'),
-        mode: normalizePvpMode(room.mode || pvpMode),
-        durationMs: clampPvpDurationSec((Number(room.durationMs || 60000) / 1000) || 60) * 1000,
-        startedAt: Number(room.startedAt || 0),
-        status: String(room.status || (room.startedAt ? 'running' : 'lobby')),
-        players: Array.isArray(room.players) ? room.players.map((p) => ({
-          socketId: String(p.socketId || p.id || ''),
-          accountId: String(p.accountId || ''),
-          username: String(p.username || p.name || 'Guest'),
-          score: Number(p.score || 0),
-          ready: Boolean(p.ready)
-        })) : []
-      };
-
-      pvpMode = pvpRoom.mode;
-      pvpMatchActive = pvpRoom.status === 'running';
-      pvpMatchEndsAt = pvpMatchActive ? Number(pvpRoom.startedAt || 0) + Number(pvpRoom.durationMs || 0) : 0;
-      updatePvpControlsUi();
-      renderPvpLobby();
-      renderPvpHud();
-      updateMultiplayerTimerText();
-    }
-
-    function startPvpMatchLocal(room) {
-      updatePvpFromRemoteState(room);
-      pvpMatchActive = true;
-      pvpMatchEndsAt = Number(pvpRoom && pvpRoom.startedAt ? pvpRoom.startedAt + pvpRoom.durationMs : (room && room.startedAt ? room.startedAt + room.durationMs : 0));
-      renderPvpHud();
-      toastMsg(`PvP started: ${pvpModeLabel(pvpMode)}.`);
-    }
-
-    function endPvpMatchLocal(result) {
-      const winner = result && result.winner ? result.winner : null;
-      const reward = Number(result && result.reward ? result.reward : pvpRewardForMode(pvpMode));
-      const myId = String(multiplayerSocket && multiplayerSocket.id ? multiplayerSocket.id : '');
-      pvpMatchActive = false;
-      pvpMatchEndsAt = 0;
-      if (winner) {
-        toastMsg(winner.socketId === myId ? `You won the PvP! +${reward} coins.` : `${winner.username || 'A player'} won the PvP.`);
-      } else {
-        toastMsg('PvP ended.');
-      }
-      renderPvpHud();
-      renderPvpLobby();
-      updateMultiplayerTimerText();
-    }
-
-    function renderPvpLobby() {
-      if (!pvpRoomInfo || !pvpScoreboard) return;
-      pvpRoomInfo.innerHTML = '';
-      pvpScoreboard.innerHTML = '';
-
-      const room = pvpRoom;
-      if (!room || !room.id) {
-        const empty = document.createElement('div');
-        empty.className = 'pvp-room-card';
-        empty.innerHTML = `<strong>No active PvP room</strong><div class="tiny">Open PvP, choose a mode, and request players.</div>`;
-        pvpRoomInfo.appendChild(empty);
-        return;
-      }
-
-      const isHost = String(room.hostSocketId || '') === String(multiplayerSocket && multiplayerSocket.id ? multiplayerSocket.id : '');
-      const card = document.createElement('div');
-      card.className = 'pvp-room-card';
-      card.innerHTML = `
-        <strong>Room ${escapeHtml(String(room.id).slice(0, 8) || '—')}</strong>
-        <div class="tiny">Host: ${escapeHtml(room.hostUsername || 'Host')}</div>
-        <div class="tiny">Mode: ${escapeHtml(pvpModeLabel(room.mode))} · Reward: ${pvpRewardForMode(room.mode)} coins · Time: ${clampPvpDurationSec((Number(room.durationMs || 60000) / 1000) || 60)}s</div>
-        <div class="tiny">Status: ${escapeHtml(room.status || 'lobby')} · Players: ${getPvpPlayers().length}/5</div>
-        <div class="pvp-room-actions">
-          <span class="team-chip">${isHost ? 'You are host' : 'Guest'}</span>
-          <span class="team-chip">${pvpMatchActive ? 'Match live' : 'Waiting'}</span>
-        </div>
-      `;
-      pvpRoomInfo.appendChild(card);
-
-      const players = getPvpPlayers();
-      if (!players.length) {
-        const noPlayers = document.createElement('div');
-        noPlayers.className = 'tiny';
-        noPlayers.textContent = 'No players in the room yet.';
-        pvpRoomInfo.appendChild(noPlayers);
-      } else {
-        players.forEach((player, index) => {
-          const row = document.createElement('div');
-          row.className = 'leader-row';
-          row.innerHTML = `
-            <div class="leader-rank">${index + 1}</div>
-            <div class="leader-name">${escapeHtml(player.username || 'Guest')}</div>
-            <div class="leader-score">${Number(player.score || 0)}</div>
-          `;
-          pvpScoreboard.appendChild(row);
-        });
-      }
-
-      if (pvpStartBtn) pvpStartBtn.disabled = !isHost || !room || room.status === 'running';
-      if (pvpLeaveBtn) pvpLeaveBtn.disabled = !room || !room.id;
-      if (pvpRequestBtn) pvpRequestBtn.disabled = !Boolean(multiplayerConnected);
-    }
-
-    function renderPvpHud() {
-      if (!pvpHud) return;
-      const players = getPvpPlayers();
-      if (!pvpMatchActive && !pvpRoom && !players.length) {
-        pvpHud.classList.remove('open');
-        pvpHud.setAttribute('aria-hidden', 'true');
-        pvpHud.innerHTML = '';
-        return;
-      }
-
-      const timeLeft = pvpMatchEndsAt > Date.now() ? Math.max(0, pvpMatchEndsAt - Date.now()) : 0;
-      pvpHud.classList.add('open');
-      pvpHud.setAttribute('aria-hidden', 'false');
-      pvpHud.innerHTML = `
-        <div class="pvp-hud-card">
-          <div class="pvp-hud-head">
-            <span>PvP ${pvpMatchActive ? 'Live' : 'Lobby'}</span>
-            <span>${pvpMatchActive ? formatLongTimer_(timeLeft) : pvpModeLabel(pvpMode)}</span>
-          </div>
-          <div class="pvp-hud-board">
-            ${players.length ? players.map((player, index) => `
-              <div class="pvp-hud-row">
-                <div>${index + 1}. ${escapeHtml(player.username || 'Guest')}</div>
-                <div>${Number(player.score || 0)}</div>
-              </div>
-            `).join('') : `<div class="tiny">Waiting for players.</div>`}
-          </div>
-        </div>
-      `;
-    }
-
-    function openPvpPanel() {
-      if (!pvpBackdrop) return;
-      setupMultiplayerSocket();
-      freezeForModal();
-      pvpBackdrop.classList.add('open');
-      pvpBackdrop.setAttribute('aria-hidden', 'false');
-      updatePvpControlsUi();
-      renderPvpLobby();
-      renderPvpHud();
-      syncDifficultyFabVisibility();
-    }
-
-    function closePvpPanel() {
-      if (!pvpBackdrop) return;
-      pvpBackdrop.classList.remove('open');
-      pvpBackdrop.setAttribute('aria-hidden', 'true');
-      syncDifficultyFabVisibility();
-      unfreezeAfterModal();
-    }
-
-    function requestPvpNow() {
-      if (!multiplayerSocket || !multiplayerConnected) {
-        toastMsg('Connect multiplayer first.');
-        return;
-      }
-
-      const rawTargets = String(pvpTargetInput?.value || '').split(',').map((s) => normalizeUsername(s)).filter(Boolean);
-      const targets = Array.from(new Set(rawTargets)).slice(0, 4);
-      if (!targets.length) {
-        toastMsg('Enter at least one username.');
-        return;
-      }
-
-      const durationMs = clampPvpDurationSec(pvpDurationInput ? pvpDurationInput.value : 60) * 1000;
-      const mode = normalizePvpMode(pvpMode);
-      multiplayerSocket.emit('pvp-create-lobby', { mode, durationMs });
-
-      targets.forEach((targetUsername) => {
-        multiplayerSocket.emit('pvp-request', { targetUsername, mode, durationMs });
-      });
-
-      toastMsg(`PvP request sent to ${targets.join(', ')}.`);
-      openPvpPanel();
-    }
-
-    function startPvpMatchNow() {
-      if (!multiplayerSocket || !multiplayerConnected) {
-        toastMsg('Connect multiplayer first.');
-        return;
-      }
-      const roomId = String(pvpRoom && pvpRoom.id ? pvpRoom.id : '');
-      if (!roomId) {
-        toastMsg('Create or join a PvP room first.');
-        return;
-      }
-      multiplayerSocket.emit('pvp-start-match', {
-        roomId,
-        mode: pvpMode,
-        durationMs: clampPvpDurationSec(pvpDurationInput ? pvpDurationInput.value : 60) * 1000
-      });
-      toastMsg('Starting PvP...');
-    }
-
-    function leavePvpNow() {
-      if (!multiplayerSocket) return;
-      const roomId = String(pvpRoom && pvpRoom.id ? pvpRoom.id : '');
-      if (roomId) {
-        multiplayerSocket.emit('pvp-leave-room', { roomId });
-      }
-      pvpRoom = null;
-      pvpMatchActive = false;
-      pvpMatchEndsAt = 0;
-      renderPvpLobby();
-      renderPvpHud();
-      updateMultiplayerTimerText();
-      toastMsg('Left PvP.');
-    }
-
-    function handlePvpIncomingInvite(packet) {
-      if (!packet) return;
-      if (blockPvpRequests) {
-        const roomId = String(packet.roomId || '');
-        if (roomId) {
-          multiplayerSocket.emit('pvp-response', { roomId, accept: false, blocked: true });
-          multiplayerSocket.emit('pvp-invite-response', { roomId, accept: false, blocked: true });
-        }
-        return;
-      }
-      openPvpInvite(packet);
-    }    ensurePvpUi();
-
-
     function renderMultiplayerPanel() {
       if (multiplayerStatus) {
         multiplayerStatus.textContent = multiplayerConnected
@@ -3254,25 +2877,22 @@
         empty.className = 'tiny';
         empty.textContent = multiplayerConnected ? 'No other ducks connected yet.' : 'Waiting to connect to the server.';
         multiplayerPlayers.appendChild(empty);
-      } else {
-        players.slice(0, 24).forEach((p) => {
-          const row = document.createElement('div');
-          row.className = 'multiplayer-row';
-          row.innerHTML = `
-            <div>
-              <strong>${escapeHtml(p.username || p.name || 'Guest')}</strong>
-              <div class="tiny">Score ${Number(p.score || 0)} · ${p.alive === false ? 'Spectating' : 'Flying'}</div>
-            </div>
-            <div><span class="team-chip">${escapeHtml(String(p.id || '').slice(0, 6) || 'player')}</span></div>
-          `;
-          multiplayerPlayers.appendChild(row);
-        });
+        return;
       }
 
-      if (typeof renderPvpLobby === 'function') renderPvpLobby();
-      if (typeof renderPvpHud === 'function') renderPvpHud();
+      players.slice(0, 24).forEach((p) => {
+        const row = document.createElement('div');
+        row.className = 'multiplayer-row';
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(p.username || p.name || 'Guest')}</strong>
+            <div class="tiny">Score ${Number(p.score || 0)} · ${p.alive === false ? 'Spectating' : 'Flying'}</div>
+          </div>
+          <div><span class="team-chip">${escapeHtml(String(p.id || '').slice(0, 6) || 'player')}</span></div>
+        `;
+        multiplayerPlayers.appendChild(row);
+      });
     }
-
 
     function setupMultiplayerSocket() {
       if (multiplayerSocket || typeof io !== 'function') return;
@@ -3297,6 +2917,41 @@
         renderMultiplayerPanel();
       });
 
+      multiplayerSocket.on('pvp-invite', (invite) => {
+        if (blockPvpRequests) return;
+        showPvpInvite(invite);
+      });
+
+      multiplayerSocket.on('pvp-room-state', (room) => {
+        applyPvpRoomState(room);
+      });
+
+      multiplayerSocket.on('pvp-room-invite', (invite) => {
+        showPvpInvite(invite);
+      });
+
+      multiplayerSocket.on('pvp-match-start', (payload) => {
+        startPvpMatch(payload && payload.room ? payload.room : payload);
+      });
+
+      multiplayerSocket.on('pvp-scoreboard', (payload) => {
+        if (payload && Array.isArray(payload.board)) {
+          renderPvpHud(payload.board, payload.mode || (pvpMatchState && pvpMatchState.mode) || 'normal', Number(payload.startedAt || Date.now()) + Number(payload.durationMs || 60000));
+          if (pvpMatchState) {
+            pvpMatchState.players = payload.board.map((p) => ({
+              socketId: String(p.socketId || ''),
+              username: String(p.username || 'Guest'),
+              score: Number(p.score || 0)
+            }));
+          }
+          syncPvpHudVisibility();
+        }
+      });
+
+      multiplayerSocket.on('pvp-match-ended', (payload) => {
+        endPvpMatch(payload || {});
+      });
+
       multiplayerSocket.on('current-players', (payload) => {
         remotePlayers.clear();
         const list = Array.isArray(payload)
@@ -3314,10 +2969,7 @@
             rot: Number(player.rot) || 0,
             skin: String(player.skin || 'classic'),
             alive: player.alive !== false,
-            lastSeen: Number(player.lastSeen || Date.now()) || Date.now(),
-            roomId: String(player.roomId || player.pvpRoomId || ''),
-            pvpMode: String(player.pvpMode || ''),
-            pvpActive: Boolean(player.pvpActive)
+            lastSeen: Number(player.lastSeen || Date.now()) || Date.now()
           });
         });
         renderMultiplayerPanel();
@@ -3334,10 +2986,7 @@
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
-          alive: player.alive !== false,
-          roomId: String(player.roomId || player.pvpRoomId || ''),
-          pvpMode: String(player.pvpMode || ''),
-          pvpActive: Boolean(player.pvpActive)
+          alive: player.alive !== false
         });
         renderMultiplayerPanel();
       });
@@ -3353,54 +3002,13 @@
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
-          alive: player.alive !== false,
-          roomId: String(player.roomId || player.pvpRoomId || ''),
-          pvpMode: String(player.pvpMode || ''),
-          pvpActive: Boolean(player.pvpActive)
+          alive: player.alive !== false
         });
       });
 
       multiplayerSocket.on('player-disconnected', (id) => {
         remotePlayers.delete(String(id || ''));
         renderMultiplayerPanel();
-      });
-
-      multiplayerSocket.on('pvp-invite', handlePvpIncomingInvite);
-      multiplayerSocket.on('pvp-room-invite', handlePvpIncomingInvite);
-
-      multiplayerSocket.on('pvp-room-state', (room) => {
-        updatePvpFromRemoteState(room);
-      });
-
-      multiplayerSocket.on('pvp-scoreboard', (payload) => {
-        if (!payload || !Array.isArray(payload.board)) return;
-        pvpRoom = pvpRoom || { id: String(payload.roomId || ''), mode: normalizePvpMode(payload.mode || pvpMode), durationMs: Number(payload.durationMs || 60000), startedAt: Number(payload.startedAt || 0), status: 'running', players: [] };
-        pvpRoom.players = payload.board.map((row) => ({
-          socketId: String(row.socketId || ''),
-          accountId: String(row.accountId || ''),
-          username: String(row.username || 'Guest'),
-          score: Number(row.score || 0),
-          ready: true
-        }));
-        pvpMode = normalizePvpMode(payload.mode || pvpMode);
-        pvpMatchActive = true;
-        pvpMatchEndsAt = Number(payload.startedAt || 0) + Number(payload.durationMs || 0);
-        renderPvpLobby();
-        renderPvpHud();
-      });
-
-      multiplayerSocket.on('pvp-match-start', (room) => {
-        startPvpMatchLocal(room);
-      });
-
-      multiplayerSocket.on('pvp-match-end', (result) => {
-        endPvpMatchLocal(result);
-      });
-
-      multiplayerSocket.on('pvp-request-declined', (payload) => {
-        if (payload && String(payload.hostId || '') === String(multiplayerSocket.id || '')) {
-          toastMsg(`${payload.username || 'A player'} declined the PVP request.`);
-        }
       });
     }
 
@@ -3415,11 +3023,7 @@
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
-        alive: state !== 'gameover',
-        pvpRoomId: pvpRoom && pvpRoom.id ? String(pvpRoom.id) : '',
-        pvpMode: pvpMode,
-        pvpActive: Boolean(pvpMatchActive),
-        pvpEndsAt: Number(pvpMatchEndsAt || 0)
+        alive: state !== 'gameover'
       });
     }
 
@@ -3437,11 +3041,7 @@
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
-        alive: state !== 'gameover',
-        pvpRoomId: pvpRoom && pvpRoom.id ? String(pvpRoom.id) : '',
-        pvpMode: pvpMode,
-        pvpActive: Boolean(pvpMatchActive),
-        pvpEndsAt: Number(pvpMatchEndsAt || 0)
+        alive: state !== 'gameover'
       };
 
       if (!multiplayerJoinSent) {
@@ -3450,15 +3050,8 @@
       } else {
         multiplayerSocket.emit('update-position', payload);
       }
-
-      if (pvpMatchActive && pvpRoom && pvpRoom.id) {
-        multiplayerSocket.emit('pvp-score', {
-          roomId: String(pvpRoom.id || ''),
-          score: Number(score || 0)
-        });
-      }
-
       renderMultiplayerPanel();
+      if (pvpMatchState && pvpMatchState.active) updatePvpTimerNow();
     }
 
     function updateDifficultyFabVisibility() {
@@ -3477,10 +3070,12 @@
         (teamWarsBackdrop && teamWarsBackdrop.classList.contains('open')) ||
         (multiplayerBackdrop && multiplayerBackdrop.classList.contains('open')) ||
         (pvpBackdrop && pvpBackdrop.classList.contains('open')) ||
-        (pvpInviteCard && pvpInviteCard.classList.contains('open')) ||
+        (pvpInvitePanel && pvpInvitePanel.classList.contains('show')) ||
+        (pvpLiveHud && !pvpLiveHud.classList.contains('hidden')) ||
         (difficultyBackdrop && difficultyBackdrop.classList.contains('open'))
       );
       difficultyFab.classList.toggle('hidden', anyFrameOpen);
+      syncPvpHudVisibility();
     }
 
     function syncDifficultyFabVisibility() {
@@ -4106,7 +3701,6 @@
       deleteConfirmBox?.classList.remove('open');
       settingsBackdrop.classList.add('open');
       settingsBackdrop.setAttribute('aria-hidden', 'false');
-      updatePvpControlsUi();
       syncDifficultyFabVisibility();
     }
 
@@ -4841,6 +4435,353 @@
       unfreezeAfterModal();
     }
 
+    function pvpModeLabel(mode) {
+      switch (String(mode || '').toLowerCase()) {
+        case 'easy': return 'Easy';
+        case 'hard': return 'Hard';
+        case 'impossible': return 'Impossible';
+        default: return 'Normal';
+      }
+    }
+
+    function pvpRewardForMode(mode) {
+      switch (String(mode || '').toLowerCase()) {
+        case 'easy': return 10;
+        case 'hard': return 35;
+        case 'impossible': return 50;
+        default: return 20;
+      }
+    }
+
+    function formatPvpTime(ms) {
+      const safe = Math.max(0, Math.floor(Number(ms) || 0));
+      const total = Math.ceil(safe / 1000);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function pvpAnyPanelOpen() {
+      return Boolean(
+        chatOpen ||
+        (shopBackdrop && shopBackdrop.classList.contains('open')) ||
+        (leaderBackdrop && leaderBackdrop.classList.contains('open')) ||
+        (nameBackdrop && nameBackdrop.classList.contains('open')) ||
+        (accountBackdrop && accountBackdrop.classList.contains('open')) ||
+        (teamBackdrop && teamBackdrop.classList.contains('open')) ||
+        (reportBackdrop && reportBackdrop.classList.contains('open')) ||
+        (suggestBackdrop && suggestBackdrop.classList.contains('open')) ||
+        (settingsBackdrop && settingsBackdrop.classList.contains('open')) ||
+        (eventsBackdrop && eventsBackdrop.classList.contains('open')) ||
+        (teamWarsBackdrop && teamWarsBackdrop.classList.contains('open')) ||
+        (multiplayerBackdrop && multiplayerBackdrop.classList.contains('open')) ||
+        (pvpBackdrop && pvpBackdrop.classList.contains('open')) ||
+        (difficultyBackdrop && difficultyBackdrop.classList.contains('open'))
+      );
+    }
+
+    function syncPvpHudVisibility() {
+      if (!pvpLiveHud) return;
+      const active = Boolean(pvpMatchState && pvpMatchState.active);
+      pvpLiveHud.classList.toggle('hidden', !active || pvpAnyPanelOpen());
+      pvpLiveHud.setAttribute('aria-hidden', (!active || pvpAnyPanelOpen()) ? 'true' : 'false');
+    }
+
+    function renderPvpRoomPlayers(roomPlayers = []) {
+      if (!pvpRoomPlayers) return;
+      pvpRoomPlayers.innerHTML = '';
+      const list = Array.isArray(roomPlayers) ? roomPlayers.slice() : [];
+      list.sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tiny';
+        empty.textContent = 'No PvP players yet.';
+        pvpRoomPlayers.appendChild(empty);
+        return;
+      }
+      list.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'multiplayer-row';
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(p.username || p.name || 'Guest')}</strong>
+            <div class="tiny">Score ${Number(p.score || 0)} · ${idx === 0 ? 'Leading' : 'Chasing'}</div>
+          </div>
+          <div><span class="team-chip">${idx + 1}</span></div>
+        `;
+        pvpRoomPlayers.appendChild(row);
+      });
+    }
+
+    function renderPvpHud(board = [], mode = 'normal', endsAt = 0) {
+      if (!pvpLiveBoard || !pvpLiveTimer || !pvpLiveMeta) return;
+      pvpLiveBoard.innerHTML = '';
+      const left = Math.max(0, Number(endsAt || 0) - Date.now());
+      pvpLiveTimer.textContent = formatPvpTime(left);
+      pvpLiveMeta.textContent = `Mode: ${pvpModeLabel(mode)} · Reward: ${pvpRewardForMode(mode)} coins`;
+      const sorted = Array.isArray(board) ? board.slice().sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0)) : [];
+      if (!sorted.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tiny';
+        empty.textContent = 'Waiting for players...';
+        pvpLiveBoard.appendChild(empty);
+        return;
+      }
+      sorted.forEach((p, index) => {
+        const row = document.createElement('div');
+        row.className = 'pvp-live-row';
+        row.innerHTML = `
+          <div class="pvp-live-rank">${index + 1}</div>
+          <div>${escapeHtml(p.username || 'Guest')}</div>
+          <div>${Number(p.score || 0)}</div>
+        `;
+        pvpLiveBoard.appendChild(row);
+      });
+    }
+
+    function openPvpPanel() {
+      if (!pvpBackdrop) return;
+      freezeForModal();
+      pvpBackdrop.classList.add('open');
+      pvpBackdrop.setAttribute('aria-hidden', 'false');
+      syncDifficultyFabVisibility();
+      syncPvpHudVisibility();
+      renderPvpRoomPlayers((pvpMatchState && pvpMatchState.players) || []);
+    }
+
+    function closePvpPanel() {
+      if (!pvpBackdrop) return;
+      pvpBackdrop.classList.remove('open');
+      pvpBackdrop.setAttribute('aria-hidden', 'true');
+      syncDifficultyFabVisibility();
+      syncPvpHudVisibility();
+      unfreezeAfterModal();
+    }
+
+    function showPvpInvite(invite) {
+      if (!pvpInvitePanel) return;
+      pvpInviteState = invite || null;
+      const hostName = String(invite && invite.hostUsername || 'Player');
+      const mode = pvpModeLabel(invite && invite.mode);
+      const duration = formatPvpTime(Number(invite && invite.durationMs || 60000));
+      pvpInviteTitle.textContent = `${hostName} invited you to PvP`;
+      pvpInviteBody.textContent = `${mode} · ${duration} match · click Yes to join.`;
+      pvpInvitePanel.classList.add('show');
+      pvpInvitePanel.setAttribute('aria-hidden', 'false');
+      syncDifficultyFabVisibility();
+    }
+
+    function hidePvpInvite() {
+      if (!pvpInvitePanel) return;
+      pvpInvitePanel.classList.remove('show');
+      pvpInvitePanel.setAttribute('aria-hidden', 'true');
+      pvpInviteState = null;
+      syncDifficultyFabVisibility();
+    }
+
+    function startPvpMatch(room) {
+      const data = room && room.room ? room.room : room || {};
+      const players = Array.isArray(data.players) ? data.players : [];
+      const mode = String(data.mode || 'normal');
+      const durationMs = Number(data.durationMs || 60000);
+      const endsAt = Number(data.startedAt || Date.now()) + durationMs;
+
+      if (pvpHudTimer) clearInterval(pvpHudTimer);
+      pvpMatchState = {
+        active: true,
+        roomId: String(data.id || data.roomId || ''),
+        mode,
+        durationMs,
+        endsAt,
+        players: players.map(p => ({
+          socketId: String(p.socketId || p.id || ''),
+          username: String(p.username || p.name || 'Guest'),
+          score: Number(p.score || 0)
+        }))
+      };
+
+      renderPvpRoomPlayers(pvpMatchState.players);
+      renderPvpHud(pvpMatchState.players, mode, endsAt);
+      syncPvpHudVisibility();
+
+      pvpHudTimer = setInterval(() => {
+        if (!pvpMatchState || !pvpMatchState.active) return;
+        const remaining = Math.max(0, pvpMatchState.endsAt - Date.now());
+        if (remaining <= 0) {
+          endPvpMatch({ winner: null, board: pvpMatchState.players || [] });
+          return;
+        }
+        renderPvpHud(pvpMatchState.players, pvpMatchState.mode, pvpMatchState.endsAt);
+      }, 250);
+    }
+
+    function endPvpMatch(result = {}) {
+      if (pvpHudTimer) {
+        clearInterval(pvpHudTimer);
+        pvpHudTimer = null;
+      }
+      if (result && Array.isArray(result.board)) {
+        pvpMatchState = {
+          active: false,
+          roomId: String(result.roomId || ''),
+          mode: String(result.mode || (pvpMatchState && pvpMatchState.mode) || 'normal'),
+          durationMs: Number(result.durationMs || (pvpMatchState && pvpMatchState.durationMs) || 60000),
+          endsAt: Date.now(),
+          players: result.board.map(p => ({
+            socketId: String(p.socketId || ''),
+            username: String(p.username || 'Guest'),
+            score: Number(p.score || 0)
+          }))
+        };
+      } else if (pvpMatchState) {
+        pvpMatchState.active = false;
+      }
+
+      renderPvpHud((pvpMatchState && pvpMatchState.players) || [], pvpMatchState && pvpMatchState.mode, Date.now());
+      syncPvpHudVisibility();
+    }
+
+    function updatePvpTimerNow() {
+      if (!pvpMatchState || !pvpMatchState.active) return;
+      renderPvpHud(pvpMatchState.players || [], pvpMatchState.mode, pvpMatchState.endsAt);
+      syncPvpHudVisibility();
+    }
+
+    function sendPvpInviteNow() {
+      const targetUsername = String(pvpTargetInput && pvpTargetInput.value || '').trim();
+      const mode = String(pvpModeSelect && pvpModeSelect.value || 'normal').trim();
+      const durationMs = Math.max(20, Math.min(600, Number(pvpDurationInput && pvpDurationInput.value || 60))) * 1000;
+      if (!targetUsername) {
+        toastMsg('Enter a player username.');
+        return;
+      }
+      if (blockPvpRequests) {
+        toastMsg('PvP requests are blocked in settings.');
+        return;
+      }
+
+      if (multiplayerSocket && multiplayerConnected) {
+        multiplayerSocket.emit('pvp-request', {
+          targetUsername,
+          mode,
+          durationMs
+        }, (res) => {
+          if (!res || !res.ok) {
+            toastMsg((res && res.error) ? res.error : 'PvP invite failed.');
+            return;
+          }
+          showPvpInvite({
+            hostUsername: playerName || 'Guest',
+            mode,
+            durationMs
+          });
+          toastMsg(`PvP invite sent to ${targetUsername}.`);
+        });
+      } else {
+        showPvpInvite({
+          hostUsername: playerName || 'Guest',
+          mode,
+          durationMs
+        });
+        toastMsg(`PvP invite preview opened for ${targetUsername}.`);
+      }
+    }
+
+    function startPvpFromHost() {
+      const mode = String(pvpModeSelect && pvpModeSelect.value || 'normal').trim();
+      const durationMs = Math.max(20, Math.min(600, Number(pvpDurationInput && pvpDurationInput.value || 60))) * 1000;
+      const room = {
+        id: 'local-pvp',
+        mode,
+        durationMs,
+        startedAt: Date.now(),
+        players: [
+          { socketId: 'you', username: playerName || 'Guest', score: Number(score || 0) },
+          ...Array.from(remotePlayers.values()).slice(0, 4).map((p) => ({
+            socketId: String(p.id || p.socketId || ''),
+            username: String(p.username || p.name || 'Guest'),
+            score: Number(p.score || 0)
+          }))
+        ]
+      };
+      startPvpMatch(room);
+      pvpBackdrop.classList.remove('open');
+      pvpBackdrop.setAttribute('aria-hidden', 'true');
+      unfreezeAfterModal();
+      toastMsg('PvP match started.');
+    }
+
+    function acceptPvpInviteNow() {
+      const invite = pvpInviteState;
+      hidePvpInvite();
+      if (!invite) return;
+
+      if (multiplayerSocket && multiplayerConnected) {
+        multiplayerSocket.emit('pvp-response', {
+          roomId: invite.roomId || '',
+          accept: true
+        }, (res) => {
+          if (!res || !res.ok) {
+            toastMsg((res && res.error) ? res.error : 'Could not join PvP.');
+            return;
+          }
+          startPvpMatch(res.room || invite);
+          toastMsg('Joined PvP.');
+        });
+      } else {
+        startPvpMatch({
+          roomId: invite.roomId || 'local',
+          mode: invite.mode || 'normal',
+          durationMs: invite.durationMs || 60000,
+          startedAt: Date.now(),
+          players: [
+            { username: playerName || 'Guest', score: Number(score || 0) }
+          ]
+        });
+      }
+    }
+
+    function declinePvpInviteNow() {
+      const invite = pvpInviteState;
+      hidePvpInvite();
+      if (multiplayerSocket && multiplayerConnected && invite && invite.roomId) {
+        multiplayerSocket.emit('pvp-response', {
+          roomId: invite.roomId,
+          accept: false
+        });
+      }
+      toastMsg('PvP invite declined.');
+    }
+
+    function applyPvpRoomState(room) {
+      if (!room) return;
+      const players = Array.isArray(room.players) ? room.players.map((p) => ({
+        socketId: String(p.socketId || ''),
+        username: String(p.username || p.name || 'Guest'),
+        score: Number(p.score || 0)
+      })) : [];
+      if (pvpMatchState && pvpMatchState.active && String(pvpMatchState.roomId || '') === String(room.id || room.roomId || '')) {
+        pvpMatchState.players = players;
+        pvpMatchState.mode = String(room.mode || pvpMatchState.mode || 'normal');
+        pvpMatchState.durationMs = Number(room.durationMs || pvpMatchState.durationMs || 60000);
+        pvpMatchState.endsAt = Number(room.startedAt || Date.now()) + Number(room.durationMs || pvpMatchState.durationMs || 60000);
+        renderPvpHud(players, pvpMatchState.mode, pvpMatchState.endsAt);
+      }
+      renderPvpRoomPlayers(players);
+      syncPvpHudVisibility();
+    }
+
+    function updatePvpDurationLabel() {
+      if (!pvpDurationLabel) return;
+      const seconds = Math.max(20, Math.min(600, Number(pvpDurationInput && pvpDurationInput.value || 60)));
+      pvpDurationLabel.textContent = `${seconds} seconds`;
+    }
+
+    function updateBlockPvpState(value) {
+      blockPvpRequests = Boolean(value);
+      if (blockPvpRequestsToggle) blockPvpRequestsToggle.checked = blockPvpRequests;
+    }
+
     function renderEventsPanel() {
       if (!eventsBoard) return;
       const rows = [
@@ -4942,12 +4883,6 @@
     function updateMultiplayerTimerText() {
       if (!multiText) return;
 
-      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > Date.now()) {
-        const leftMs = Math.max(0, Number(pvpMatchEndsAt || 0) - Date.now());
-        multiText.textContent = `PVP ${formatLongTimer_(leftMs)}`;
-        return;
-      }
-
       if (multiplayerConnected) {
         multiText.textContent = 'LIVE';
         return;
@@ -4968,7 +4903,6 @@
       shieldText.textContent = shieldCharges;
       nameText.textContent = playerName || 'Guest';
       updateMultiplayerTimerText();
-      if (typeof renderPvpHud === 'function') renderPvpHud();
     }
 
     function updateMultiplayerState() {
@@ -4979,10 +4913,6 @@
         toastMsg('⌛ Multiplayer expired got it?.');
         renderShop();
         persistGameData(true);
-      }
-      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > 0 && Date.now() >= Number(pvpMatchEndsAt || 0)) {
-        pvpMatchActive = false;
-        renderPvpHud();
       }
     }
 
@@ -5003,8 +4933,7 @@
         multiplayerActive: Boolean(multiplayerActive),
         multiplayerEndTime: Number(multiplayerEndTime || 0),
         roomId: String(roomState && roomState.id ? roomState.id : ''),
-        serverKey: String(roomState && roomState.serverKey ? roomState.serverKey : ''),
-        blockPvpRequests: Boolean(blockPvpRequests)
+        serverKey: String(roomState && roomState.serverKey ? roomState.serverKey : '')
       };
 
       google.script.run
@@ -5041,17 +4970,16 @@
       ownedSkins = new Set(Array.isArray(account.ownedSkins) && account.ownedSkins.length ? account.ownedSkins : ['classic']);
       duck.skin = ownedSkins.has(account.activeSkin) ? account.activeSkin : 'classic';
       shieldCharges = Number(account.shieldCharges || 0);
-      blockPvpRequests = Boolean(account.blockPvpRequests || false);
       multiplayerEndTime = Number(account.multiplayerEndTime || 0);
       multiplayerActive = Number(account.multiplayerEndTime || 0) > Date.now();
       myPlayerKey = String(d.playerKey || account.playerKey || account.accountId || '');
       roomState = d.roomId ? { id: String(d.roomId || ''), serverKey: String(d.serverKey || ''), players: [] } : roomState;
+      updateBlockPvpState(Boolean(account.blockPvpRequests || d.blockPvpRequests || false));
 
       document.body.dataset.theme = account.theme === 'night' ? 'night' : 'day';
       themeBtn.textContent = document.body.dataset.theme === 'night' ? 'Day Mode' : 'Night Mode';
 
       updatePlayerName(normalizeUsername(account.username) || 'Guest');
-      updatePvpControlsUi();
       serverReady = true;
 
       syncTopbar();
@@ -5859,10 +5787,8 @@
           return { body1: '#a5f3fc', body2: '#38bdf8', wing: '#e0f2fe', beak: '#60a5fa', outline: '#0f172a' };
         case 'xbox':
           return { body1: '#0b7a2a', body2: '#49d16d', wing: '#b7ffd0', beak: '#d9ffe8', outline: '#063012' };
-        case 'gamer':
-          return { body1: '#374151', body2: '#111827', wing: '#60a5fa', beak: '#fbbf24', outline: '#e5e7eb' };
         case 'multiplayer':
-          return { body1: '#4338ca', body2: '#1d4ed8', wing: '#f472b6', beak: '#fbbf24', outline: '#f8fafc' };
+          return { body1: '#2dd4bf', body2: '#60a5fa', wing: '#a7f3d0', beak: '#f59e0b', outline: '#0f172a' };
         default:
           return { body1: '#fff86a', body2: '#ffd400', wing: '#f5c400', beak: '#ff7a00', outline: '#222' };
       }
@@ -6001,59 +5927,31 @@
           ctx.restore();
         }
 
-        if (skinKey === 'gamer' || skinKey === 'multiplayer') {
+        if (skinKey === 'multiplayer') {
           ctx.save();
-          ctx.strokeStyle = 'rgba(255,255,255,0.90)';
-          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.strokeStyle = 'rgba(15,23,42,0.95)';
+          ctx.fillStyle = 'rgba(15,23,42,0.90)';
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.roundRect?.(-15, -11, 32, 16, 7);
-          if (!ctx.roundRect) {
-            ctx.rect(-15, -11, 32, 16);
-          }
-          ctx.fill();
+          ctx.roundRect?.(-18, -12, 14, 8, 3);
+          ctx.roundRect ? ctx.stroke() : null;
+          ctx.beginPath();
+          ctx.arc(-11, -8, 7, 0, Math.PI * 2);
+          ctx.arc(4, -8, 7, 0, Math.PI * 2);
           ctx.stroke();
           ctx.beginPath();
-          ctx.moveTo(-2, -3);
-          ctx.lineTo(10, -3);
+          ctx.moveTo(-4, -8);
+          ctx.lineTo(-3, -8);
           ctx.stroke();
-
-          ctx.fillStyle = 'rgba(17,24,39,0.96)';
-          ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.roundRect?.(12, 10, 17, 12, 5);
-          if (!ctx.roundRect) {
-            ctx.rect(12, 10, 17, 12);
-          }
+          ctx.roundRect ? ctx.roundRect(-9, 6, 18, 7, 3) : ctx.rect(-9, 6, 18, 7);
           ctx.fill();
           ctx.stroke();
-          ctx.fillStyle = 'rgba(255,255,255,0.85)';
-          ctx.fillRect(18, 13, 5, 2);
-          ctx.fillRect(20, 11, 2, 6);
-
-          if (skinKey === 'multiplayer') {
-            ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-            ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.roundRect?.(-6, 10, 22, 12, 6);
-            if (!ctx.roundRect) {
-              ctx.rect(-6, 10, 22, 12);
-            }
-            ctx.fill();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(-1, 16);
-            ctx.lineTo(16, 16);
-            ctx.stroke();
-            ctx.fillStyle = '#111827';
-            ctx.beginPath();
-            ctx.arc(9, 11, 2, 0, Math.PI * 2);
-            ctx.arc(12, 13, 1.8, 0, Math.PI * 2);
-            ctx.fill();
-          }
-
+          ctx.fillStyle = 'rgba(255,255,255,0.95)';
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(15, 10, 13, 9, 3) : ctx.rect(15, 10, 13, 9);
+          ctx.fill();
+          ctx.stroke();
           ctx.restore();
         }
       }
@@ -6207,10 +6105,6 @@
       if (p.alive === false) return false;
       if (typeof p.lastSeen === 'number' && Date.now() - p.lastSeen > REMOTE_PLAYER_TIMEOUT_MS) return false;
 
-      if (pvpMatchActive && pvpRoom && pvpRoom.id) {
-        const sameRoom = String(p.roomId || '') === String(pvpRoom.id || '');
-        if (!sameRoom) return false;
-      }
       const dx = Math.abs((Number(p.x) || 0) - (Number(duck.x) || 0));
       const dy = Math.abs((Number(p.y) || 0) - (Number(duck.y) || 0));
       return dx <= REMOTE_PLAYER_DRAW_DISTANCE && dy <= (H + 160);
@@ -7015,12 +6909,17 @@
     closeSettingsBtn.addEventListener('click', closeSettingsPanel);
     chatCloseBtn.addEventListener('click', closeChat);
     chatSendBtn.addEventListener('click', sendChatMessage);
-    pvpRequestBtn.addEventListener('click', requestPvpNow);
-    pvpStartBtn.addEventListener('click', startPvpMatchNow);
-    pvpLeaveBtn.addEventListener('click', leavePvpNow);
-    pvpInviteYesBtn.addEventListener('click', () => respondToPvpInvite(true));
-    pvpInviteNoBtn.addEventListener('click', () => respondToPvpInvite(false));
-    closePvpBtn.addEventListener('click', closePvpPanel);
+
+    sendPvpInviteBtn.addEventListener('click', sendPvpInviteNow);
+    startPvpBtn.addEventListener('click', startPvpFromHost);
+    pvpDurationInput.addEventListener('input', updatePvpDurationLabel);
+    pvpInviteYesBtn.addEventListener('click', acceptPvpInviteNow);
+    pvpInviteNoBtn.addEventListener('click', declinePvpInviteNow);
+    blockPvpRequestsToggle.addEventListener('change', () => {
+      updateBlockPvpState(blockPvpRequestsToggle.checked);
+      persistGameData(true);
+      toastMsg(blockPvpRequests ? 'PvP requests blocked.' : 'PvP requests allowed.');
+    });
 
     createAccountBtn.addEventListener('click', createAccountNow);
     doLoginBtn.addEventListener('click', loginAccountNow);
@@ -7072,16 +6971,6 @@
     multiplayerBackdrop.addEventListener('click', (e) => {
       if (e.target === multiplayerBackdrop) closeMultiplayerPanel();
     });
-
-    pvpBackdrop.addEventListener('click', (e) => {
-      if (e.target === pvpBackdrop) closePvpPanel();
-    });
-
-    if (pvpInviteCard) {
-      pvpInviteCard.addEventListener('click', (e) => {
-        if (e.target === pvpInviteCard) closePvpInvite();
-      });
-    }
 
     teamBackdrop.addEventListener('click', (e) => {
       if (e.target === teamBackdrop) closeTeamPanel();
