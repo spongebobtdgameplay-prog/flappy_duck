@@ -451,6 +451,7 @@ function snapshotOnlinePlayer(socket, extra = {}) {
     username: sanitizeUsername(extra.username || info.username || 'Guest') || 'Guest',
     score: Math.max(0, Number(extra.score || 0)),
     pvpActive: Boolean(extra.pvpActive || false),
+    roomId: String(extra.roomId || info.roomId || ''),
     lastSeen: Date.now()
   };
 }
@@ -461,6 +462,7 @@ function broadcastOnlinePlayers() {
     username: String(row.username || 'Guest'),
     score: Math.max(0, Number(row.score || 0)),
     pvpActive: Boolean(row.pvpActive || false),
+    roomId: String(row.roomId || ''),
     lastSeen: Number(row.lastSeen || Date.now())
   }));
   io.emit('onlinePlayers', list);
@@ -1280,8 +1282,8 @@ io.on('connection', (socket) => {
     player.username = sanitizeUsername(payload.username || payload.name || player.username || 'Guest') || 'Guest';
     player.blockPvpRequests = Boolean(payload.blockPvpRequests || false);
     multiplayerState.set(socket.id, player);
-    socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests };
-    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp) });
+    socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests, roomId: String(payload.pvpRoomId || '') };
+    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp), roomId: String(payload.pvpRoomId || '') });
     socket.emit('current-players', Array.from(multiplayerState.values()).filter(p => p.id !== socket.id).map(snapshotPlayer));
     socket.broadcast.emit('player-joined', snapshotPlayer(player));
   });
@@ -1293,8 +1295,8 @@ io.on('connection', (socket) => {
     player.username = sanitizeUsername(payload.username || existing.username || socket.data.playerInfo.username || 'Guest') || 'Guest';
     player.blockPvpRequests = Boolean(payload.blockPvpRequests ?? existing.blockPvpRequests ?? socket.data.playerInfo.blockPvpRequests ?? false);
     multiplayerState.set(socket.id, player);
-    socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests };
-    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp) });
+    socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests, roomId: String(payload.pvpRoomId || '') };
+    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp), roomId: String(payload.pvpRoomId || '') });
     socket.broadcast.emit('player-state', snapshotPlayer(player));
   });
 
