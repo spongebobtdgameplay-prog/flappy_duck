@@ -1932,7 +1932,7 @@
         <div class="stat">SCORE: <span id="scoreText">0</span></div>
         <div class="stat">🪙 <span id="coinText">0</span></div>
         <div class="stat">🛡️ <span id="shieldText">0</span></div>
-        <div class="stat">👥 <span id="multiText">OFF</span></div>
+        <div class="stat">👥 <span id="multiText">0 People Online</span></div>
       </div>
       <div class="buttons">
         <button id="nameBtn" class="btn-secondary" type="button">Name</button>
@@ -1956,10 +1956,6 @@
 
     <canvas id="gameCanvas"></canvas>
 
-    <div id="liveGameCounterFrame" class="live-game-counter hidden" aria-hidden="true">
-      <div class="live-game-counter-title">LIVE GAME</div>
-      <div id="liveGameCounterLabel" class="live-game-counter-label">OFFLINE</div>
-    </div>
 
     <div id="overlay" class="overlay">
       <h1>Flappy Duck GOATED WITH MUTIPLAYER 🔥</h1>
@@ -5084,34 +5080,11 @@
     }
 
     function updateMultiplayerTimerText() {
-      const liveLabel = liveGameCounterLabel || document.getElementById('liveGameCounterLabel');
-      let text = 'OFFLINE';
-
-      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > Date.now()) {
-        const leftMs = Math.max(0, Number(pvpMatchEndsAt || 0) - Date.now());
-        text = `PVP ${formatLongTimer_(leftMs)}`;
-      } else if (multiplayerConnected) {
-        const count = Math.max(1, Number(onlineCountCache) || (remotePlayers.size + 1) || 1);
-        text = `ONLINE ${count}`;
-      } else if (Number(multiplayerEndTime || 0) > Date.now()) {
-        const leftMs = Math.max(0, Number(multiplayerEndTime || 0) - Date.now());
-        text = formatLongTimer_(leftMs);
-      } else {
-        text = 'OFF';
-      }
-
-      if (multiText) multiText.textContent = text;
-      if (liveLabel) liveLabel.textContent = text;
-      syncLiveCounterVisibility();
+      const count = Math.max(0, Number(onlineCountCache) || (multiplayerConnected ? remotePlayers.size + 1 : 0) || 0);
+      if (multiText) multiText.textContent = `${count} People Online`;
     }
 
-    function syncLiveCounterVisibility() {
-      const liveFrame = liveGameCounterFrame || document.getElementById('liveGameCounterFrame');
-      if (!liveFrame) return;
-      const hidden = Boolean(document.querySelector('.shop-backdrop.open, .report-backdrop.open, .difficulty-backdrop.open, .pvp-backdrop.open'));
-      liveFrame.classList.toggle('hidden', hidden);
-      liveFrame.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-    }
+    function syncLiveCounterVisibility() {}
 
     function syncTopbar() {
       bestText.textContent = best;
@@ -6364,10 +6337,16 @@
       const localScore = Number(score || 0);
       const remoteScore = Number(p && p.score || 0);
       const scoreGap = remoteScore - localScore;
-      const spread = clamp(Math.max(92, W * 0.14), 92, 180);
+      const pipeGap = Math.abs(scoreGap);
+
+      if (pipeGap > 30) {
+        return { x: -9999, y: -9999, scoreGap, pipeGap };
+      }
+
+      const spread = clamp(Math.max(18, W * 0.035), 18, 34);
       const x = clamp((Number(duck.x) || W * 0.25) + scoreGap * spread, 52, Math.max(52, W - 52));
       const y = Number(p && p.y) || Number(duck.y) || H * 0.5;
-      return { x, y, scoreGap };
+      return { x, y, scoreGap, pipeGap };
     }
 
     function isRemoteDuckVisible(p) {
@@ -6380,8 +6359,9 @@
         if (!sameRoom) return false;
       }
       const pos = getRemoteDuckScreenPos(p);
+      if (Math.abs(pos.pipeGap || 0) > 30) return false;
       const yGap = Math.abs((Number(pos.y) || 0) - (Number(duck.y) || 0));
-      return Math.abs(pos.scoreGap) <= 6 || yGap <= (H + 160);
+      return yGap <= (H + 160);
     }
 
     function pruneRemotePlayers(force = false) {
