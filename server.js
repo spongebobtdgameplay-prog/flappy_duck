@@ -35,6 +35,9 @@ const PVP_MIN_MS = 20_000;
 const PVP_MAX_MS = 10 * 60_000;
 const PVP_MAX_PLAYERS = 5;
 
+const onlinePlayers = new Map();
+let livePvpPlayers = 0;
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
@@ -439,6 +442,45 @@ function awardTeamWarPointsInData(data, teamId, points) {
 function isAdminRequest(req) {
   const token = String(req.headers['x-admin-key'] || '').trim();
   return token && token === ADMIN_KEY;
+}
+
+function snapshotOnlinePlayer(socket, extra = {}) {
+  const info = socket && socket.data && socket.data.playerInfo ? socket.data.playerInfo : {};
+  return {
+    id: String(socket && socket.id || ''),
+    username: sanitizeUsername(extra.username || info.username || 'Guest') || 'Guest',
+    score: Math.max(0, Number(extra.score || 0)),
+    pvpActive: Boolean(extra.pvpActive || false),
+    lastSeen: Date.now()
+  };
+}
+
+function broadcastOnlinePlayers() {
+  const list = Array.from(onlinePlayers.values()).map((row) => ({
+    id: String(row.id || ''),
+    username: String(row.username || 'Guest'),
+    score: Math.max(0, Number(row.score || 0)),
+    pvpActive: Boolean(row.pvpActive || false),
+    lastSeen: Number(row.lastSeen || Date.now())
+  }));
+  io.emit('onlinePlayers', list);
+  io.emit('onlineCount', list.length);
+}
+
+function setOnlinePlayer(socket, extra = {}) {
+  if (!socket) return;
+  onlinePlayers.set(socket.id, snapshotOnlinePlayer(socket, extra));
+  broadcastOnlinePlayers();
+}
+
+function clearOnlinePlayer(socketId) {
+  if (!socketId) return;
+  onlinePlayers.delete(socketId);
+  broadcastOnlinePlayers();
+}
+
+function updateLivePvpCount() {
+  io.emit('livePvpUpdate', { players: livePvpPlayers, updated: Date.now() });
 }
 
 function getGameDataForAccount(account) {
@@ -1239,6 +1281,7 @@ io.on('connection', (socket) => {
     player.blockPvpRequests = Boolean(payload.blockPvpRequests || false);
     multiplayerState.set(socket.id, player);
     socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests };
+    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp) });
     socket.emit('current-players', Array.from(multiplayerState.values()).filter(p => p.id !== socket.id).map(snapshotPlayer));
     socket.broadcast.emit('player-joined', snapshotPlayer(player));
   });
@@ -1251,6 +1294,7 @@ io.on('connection', (socket) => {
     player.blockPvpRequests = Boolean(payload.blockPvpRequests ?? existing.blockPvpRequests ?? socket.data.playerInfo.blockPvpRequests ?? false);
     multiplayerState.set(socket.id, player);
     socket.data.playerInfo = { accountId: player.accountId, username: player.username, blockPvpRequests: player.blockPvpRequests };
+    setOnlinePlayer(socket, { username: player.username, pvpActive: Boolean(socket.data.inPvp) });
     socket.broadcast.emit('player-state', snapshotPlayer(player));
   });
 
@@ -1292,9 +1336,16 @@ io.on('connection', (socket) => {
     if (!room) { if (typeof ack === 'function') ack({ ok: false, error: 'Room not found.' }); return; }
     if (!accept) { io.to(room.hostSocketId).emit('pvp-invite-declined', { roomId: room.id, username: me.username || 'Guest' }); if (typeof ack === 'function') ack({ ok: true }); return; }
     if (room.players.length >= PVP_MAX_PLAYERS) { if (typeof ack === 'function') ack({ ok: false, error: 'PvP room is full.' }); return; }
+    const wasInPvp = Boolean(socket.data.inPvp);
     const ok = joinPvpRoom(room, socket.id, { accountId: me.accountId || '', username: me.username || 'Guest' });
     if (!ok) { if (typeof ack === 'function') ack({ ok: false, error: 'PvP room is full.' }); return; }
     socket.join(room.id);
+    socket.data.inPvp = true;
+    if (!wasInPvp) {
+      livePvpPlayers += 1;
+      updateLivePvpCount();
+    }
+    setOnlinePlayer(socket, { username: me.username || 'Guest', pvpActive: true });
     socket.emit('pvp-joined', pvpRoomSnapshot(room));
     io.to(room.hostSocketId).emit('pvp-player-joined', { roomId: room.id, username: me.username || 'Guest' });
     emitRoomState(room);
@@ -1345,12 +1396,23 @@ io.on('connection', (socket) => {
   socket.on('pvp-leave-room', (payload = {}, ack) => {
     const room = pvpRooms.get(String(payload.roomId || ''));
     if (room) removeFromPvpRoom(socket.id);
+    if (socket.data.inPvp) {
+      socket.data.inPvp = false;
+      livePvpPlayers = Math.max(0, livePvpPlayers - 1);
+      updateLivePvpCount();
+    }
+    setOnlinePlayer(socket, { username: socket.data.playerInfo.username || 'Guest', pvpActive: false });
     if (typeof ack === 'function') ack({ ok: true });
   });
 
   socket.on('disconnect', () => {
+    if (socket.data.inPvp) {
+      livePvpPlayers = Math.max(0, livePvpPlayers - 1);
+      updateLivePvpCount();
+    }
     removeFromPvpRoom(socket.id);
     multiplayerState.delete(socket.id);
+    clearOnlinePlayer(socket.id);
     socket.broadcast.emit('player-disconnected', socket.id);
   });
 });
