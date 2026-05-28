@@ -2045,15 +2045,15 @@
 
     <div id="accountBackdrop" class="shop-backdrop" aria-hidden="true">
       <div class="name-card">
-        <h2>Account</h2>
-        <p>Create a real account or log in. Data saves to your account, not the browser.</p>
+        <h2>Log in or create an account</h2>
+        <p>Use an account to save progress, reports, suggestions, and multiplayer identity.</p>
         <input id="accountUserInput" class="name-input" type="text" maxlength="16" placeholder="Username" />
         <div style="height:8px"></div>
         <input id="accountPassInput" class="name-input" type="password" maxlength="32" placeholder="Password" />
         <div id="accountError" class="name-error"></div>
         <div class="buttons" style="justify-content:flex-end; margin-top:12px;">
           <button id="createAccountBtn" class="btn-primary" type="button">Create Account</button>
-          <button id="doLoginBtn" class="btn-secondary" type="button">Login</button>
+          <button id="doLoginBtn" class="btn-secondary" type="button">Log in</button>
         </div>
       </div>
     </div>
@@ -2829,6 +2829,7 @@
     let inventory = { shield: 0, magnet: 0, slowmo: 0, burst: 0 };
     let saveQueued = false;
     let serverReady = false;
+    let authRequired = false;
     let playerName = 'Guest';
     let leaderboards = { highscores: [], coins: [] };
     let teamData = { teams: [], currentTeam: null, leaderboard: [], invites: [], requests: [] };
@@ -3406,6 +3407,8 @@
         multiplayerConnected = true;
         roomState = { id: 'global', serverKey: multiplayerSocket.id || '' };
         multiplayerJoinSent = false;
+        multiplayerLastEmit = 0;
+        roomSyncTimer = 0;
         renderMultiplayerPanel();
         syncRoomPresence(true);
       });
@@ -3456,6 +3459,7 @@
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
           alive: player.alive !== false,
+          lastSeen: Number(player.lastSeen || Date.now()) || Date.now(),
           roomId: String(player.roomId || player.pvpRoomId || ''),
           pvpMode: String(player.pvpMode || ''),
           pvpActive: Boolean(player.pvpActive)
@@ -3475,6 +3479,7 @@
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
           alive: player.alive !== false,
+          lastSeen: Number(player.lastSeen || Date.now()) || Date.now(),
           roomId: String(player.roomId || player.pvpRoomId || ''),
           pvpMode: String(player.pvpMode || ''),
           pvpActive: Boolean(player.pvpActive)
@@ -4849,7 +4854,7 @@
       google.script.run
         .withSuccessHandler((res) => {
           suggestionVoteBusy = false;
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
 
           if (!res || !res.ok) {
             toastMsg((res && res.error) ? res.error : 'Could not update suggestion.');
@@ -4863,7 +4868,7 @@
         })
         .withFailureHandler((err) => {
           suggestionVoteBusy = false;
-          if (requestId !== suggestionRequestSeq) return;
+          if (requestId !== suggestionVoteSeq) return;
           console.error(err);
           toastMsg('Could not update suggestion.');
         })
@@ -4881,6 +4886,11 @@
     }
 
     function showNameModal() {
+      if (authRequired || !myPlayerKey) {
+        openAccountModal();
+        setTimeout(() => accountUserInput?.focus(), 0);
+        return;
+      }
       freezeForModal();
       nameError.textContent = '';
       usernameInput.value = playerName === 'Guest' ? '' : playerName;
@@ -5171,6 +5181,7 @@
     function applyServerData(data) {
       const d = data || {};
       const account = d.account || d;
+      const username = normalizeUsername(account.username);
 
       best = Number(account.best || 0);
       coins = Number(account.coins || 0);
@@ -5188,11 +5199,12 @@
       multiplayerActive = Number(account.multiplayerEndTime || 0) > Date.now();
       myPlayerKey = String(d.playerKey || account.playerKey || account.accountId || '');
       roomState = d.roomId ? { id: String(d.roomId || ''), serverKey: String(d.serverKey || ''), players: [] } : roomState;
+      authRequired = !username || !myPlayerKey;
 
       document.body.dataset.theme = account.theme === 'night' ? 'night' : 'day';
       themeBtn.textContent = document.body.dataset.theme === 'night' ? 'Day Mode' : 'Night Mode';
 
-      updatePlayerName(normalizeUsername(account.username) || 'Guest');
+      updatePlayerName(username || 'Guest');
       updatePvpControlsUi();
       serverReady = true;
 
@@ -5202,7 +5214,11 @@
       updateOverlayForState();
       syncHackerTargets(reportData && reportData.accounts ? reportData.accounts : []);
 
-      if (!normalizeUsername(account.username)) showNameModal();
+      if (authRequired) {
+        openAccountModal();
+      } else if (accountBackdrop && accountBackdrop.classList.contains('open')) {
+        closeAccountModal(true);
+      }
       loadLeaderboards();
       loadChatMessages();
       loadTeamData();
@@ -6344,6 +6360,16 @@
       ctx.restore();
     }
 
+    function getRemoteDuckScreenPos(p) {
+      const localScore = Number(score || 0);
+      const remoteScore = Number(p && p.score || 0);
+      const scoreGap = remoteScore - localScore;
+      const spread = clamp(Math.max(92, W * 0.14), 92, 180);
+      const x = clamp((Number(duck.x) || W * 0.25) + scoreGap * spread, 52, Math.max(52, W - 52));
+      const y = Number(p && p.y) || Number(duck.y) || H * 0.5;
+      return { x, y, scoreGap };
+    }
+
     function isRemoteDuckVisible(p) {
       if (!p) return false;
       if (p.alive === false) return false;
@@ -6353,9 +6379,9 @@
         const sameRoom = String(p.roomId || '') === String(pvpRoom.id || '');
         if (!sameRoom) return false;
       }
-      const dx = Math.abs((Number(p.x) || 0) - (Number(duck.x) || 0));
-      const dy = Math.abs((Number(p.y) || 0) - (Number(duck.y) || 0));
-      return dx <= REMOTE_PLAYER_DRAW_DISTANCE && dy <= (H + 160);
+      const pos = getRemoteDuckScreenPos(p);
+      const yGap = Math.abs((Number(pos.y) || 0) - (Number(duck.y) || 0));
+      return Math.abs(pos.scoreGap) <= 6 || yGap <= (H + 160);
     }
 
     function pruneRemotePlayers(force = false) {
@@ -6376,8 +6402,9 @@
     function drawRemoteDuck(p) {
       if (!isRemoteDuckVisible(p)) return;
 
+      const pos = getRemoteDuckScreenPos(p);
       const alpha = p.alive === false ? 0.45 : 0.82;
-      drawDuckAvatar(Number(p.x) || 0, Number(p.y) || 0, Number(p.rot) || 0, p.skin || 'classic', {
+      drawDuckAvatar(pos.x, pos.y, Number(p.rot) || 0, p.skin || 'classic', {
         alpha,
         pulse: 0,
         showShield: false
@@ -6388,7 +6415,7 @@
       ctx.fillStyle = '#fff';
       ctx.globalAlpha = p.alive === false ? 0.55 : 1;
       ctx.font = '800 12px system-ui, sans-serif';
-      ctx.fillText(p.username || 'Guest', Number(p.x) || 0, (Number(p.y) || 0) - 30);
+      ctx.fillText(p.username || 'Guest', pos.x, pos.y - 30);
       ctx.restore();
     }
 
@@ -6433,9 +6460,9 @@
       updateMultiplayerState();
       pruneRemotePlayers();
       updateMultiplayerTimerText();
-      if (multiplayerActive && multiplayerEndTime > Date.now()) {
+      if (multiplayerConnected) {
         roomSyncTimer += dt;
-        if (roomSyncTimer >= 0.25) {
+        if (roomSyncTimer >= 0.9) {
           roomSyncTimer = 0;
           syncRoomPresence();
         }
@@ -6677,19 +6704,27 @@
 
     function openAccountModal() {
       if (!accountBackdrop) return;
+      if (accountBackdrop.classList.contains('open')) return;
+      freezeForModal();
       accountError.textContent = '';
+      const heading = accountBackdrop.querySelector('h2');
+      const paragraph = accountBackdrop.querySelector('p');
+      if (heading) heading.textContent = 'Log in or create an account';
+      if (paragraph) paragraph.textContent = 'Use an account to save progress, reports, suggestions, and multiplayer identity.';
       accountBackdrop.classList.add('open');
       accountBackdrop.setAttribute('aria-hidden', 'false');
       syncDifficultyFabVisibility();
       syncLiveCounterVisibility();
     }
 
-    function closeAccountModal() {
+    function closeAccountModal(force = false) {
       if (!accountBackdrop) return;
+      if (authRequired && !force) return;
       accountBackdrop.classList.remove('open');
       accountBackdrop.setAttribute('aria-hidden', 'true');
       syncDifficultyFabVisibility();
       syncLiveCounterVisibility();
+      if (modalFreezeDepth > 0) unfreezeAfterModal();
     }
 
     function syncHackerTargets(accounts) {
@@ -6719,7 +6754,8 @@
             accountError.textContent = (res && res.error) ? res.error : 'Could not create account.';
             return;
           }
-          closeAccountModal();
+          authRequired = false;
+          closeAccountModal(true);
           applyServerData({ account: res.account, playerKey: res.account && res.account.accountId, moderator: res.account && res.account.moderator });
           persistGameData(true);
           refreshAllData();
@@ -6742,7 +6778,8 @@
             accountError.textContent = (res && res.error) ? res.error : 'Could not log in.';
             return;
           }
-          closeAccountModal();
+          authRequired = false;
+          closeAccountModal(true);
           applyServerData({ account: res.account, playerKey: res.account && res.account.accountId, moderator: res.account && res.account.moderator });
           refreshAllData();
           toastMsg('Logged in.');
@@ -6759,6 +6796,7 @@
           if (res && res.ok) {
             playerName = 'Guest';
             myPlayerKey = '';
+            authRequired = true;
             updatePlayerName('Guest');
             openAccountModal();
             toastMsg('Logged out.');
@@ -7181,7 +7219,7 @@
     deleteYesBtn.addEventListener('click', deleteAccountNow);
     deleteNoBtn.addEventListener('click', hideDeleteConfirm);
     accountBackdrop.addEventListener('click', (e) => {
-      if (e.target === accountBackdrop) closeAccountModal();
+      if (e.target === accountBackdrop && !authRequired) closeAccountModal();
     });
 
     createTeamBtn.addEventListener('click', createTeam);
@@ -7242,7 +7280,10 @@
       if (e.target === leaderBackdrop) closeLeaderboard();
     });
 
-    nameBtn.addEventListener('click', showNameModal);
+    nameBtn.addEventListener('click', () => {
+      if (authRequired || !myPlayerKey) openAccountModal();
+      else showNameModal();
+    });
     saveNameBtn.addEventListener('click', saveNameNow);
     usernameInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') saveNameNow();
