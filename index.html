@@ -1468,38 +1468,6 @@
       to { box-shadow: 0 0 18px rgba(255, 215, 0, 0.92), 0 0 34px rgba(255, 215, 0, 0.5); }
     }
 
-    .live-game-counter {
-      position: fixed;
-      left: 50%;
-      top: calc(var(--topbar-h) + 16px);
-      transform: translateX(-50%);
-      z-index: 15;
-      pointer-events: none;
-      min-width: min(420px, 92vw);
-      padding: 12px 16px;
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(12,18,34,0.96), rgba(9,14,26,0.92));
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: var(--shadow), var(--glow);
-      text-align: center;
-      backdrop-filter: blur(14px) saturate(1.15);
-    }
-
-    .live-game-counter-title {
-      font-size: 0.72rem;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.65);
-      font-weight: 900;
-    }
-
-    .live-game-counter-label {
-      font-size: 1.1rem;
-      font-weight: 900;
-      margin-top: 2px;
-      color: #fff;
-    }
-
     .request-popup {
       position: fixed;
       left: 50%;
@@ -2800,6 +2768,7 @@
     let roomState = null;
     const remotePlayers = new Map();
     const REMOTE_PLAYER_TIMEOUT_MS = 12000;
+    const REMOTE_PLAYER_MAX_PIPE_GAP = 30;
     const REMOTE_PLAYER_DRAW_DISTANCE = 900;
     const gnomes = [];
     let lastDeathReason = 'fell to their death';
@@ -3430,6 +3399,7 @@
             name: String(player.name || player.username || 'Guest'),
             x: Number(player.x) || 0,
             y: Number(player.y) || 0,
+            progress: Number(player.progress ?? player.score) || 0,
             score: Number(player.score) || 0,
             rot: Number(player.rot) || 0,
             skin: String(player.skin || 'classic'),
@@ -3451,6 +3421,7 @@
           name: String(player.name || player.username || 'Guest'),
           x: Number(player.x) || 0,
           y: Number(player.y) || 0,
+          progress: Number(player.progress ?? player.score) || 0,
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
@@ -3471,6 +3442,7 @@
           name: String(player.name || player.username || 'Guest'),
           x: Number(player.x) || 0,
           y: Number(player.y) || 0,
+          progress: Number(player.progress ?? player.score) || 0,
           score: Number(player.score) || 0,
           rot: Number(player.rot) || 0,
           skin: String(player.skin || 'classic'),
@@ -3545,6 +3517,7 @@
         username: String(playerName || 'Guest'),
         x: Number(duck.x || 0),
         y: Number(duck.y || 0),
+        progress: Number(score || 0),
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
@@ -3567,6 +3540,7 @@
         username: String(playerName || 'Guest'),
         x: Number(duck.x || 0),
         y: Number(duck.y || 0),
+        progress: Number(score || 0),
         score: Number(score || 0),
         rot: Number(duck.rot || 0),
         skin: String(duck.skin || 'classic'),
@@ -4893,7 +4867,6 @@
       nameBackdrop.classList.add('open');
       nameBackdrop.setAttribute('aria-hidden', 'false');
       syncDifficultyFabVisibility();
-      syncLiveCounterVisibility();
       setTimeout(() => usernameInput.focus(), 0);
     }
 
@@ -4901,7 +4874,6 @@
       nameBackdrop.classList.remove('open');
       nameBackdrop.setAttribute('aria-hidden', 'true');
       syncDifficultyFabVisibility();
-      syncLiveCounterVisibility();
       unfreezeAfterModal();
     }
 
@@ -5080,21 +5052,21 @@
     }
 
     function updateMultiplayerTimerText() {
-      const count = Math.max(0, Number(onlineCountCache) || (multiplayerConnected ? remotePlayers.size + 1 : 0) || 0);
-      if (multiText) multiText.textContent = `${count} People Online`;
+      let text = '0 People Online';
+
+      if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > Date.now()) {
+        const leftMs = Math.max(0, Number(pvpMatchEndsAt || 0) - Date.now());
+        text = `PVP ${formatLongTimer_(leftMs)}`;
+      } else {
+        const count = Math.max(0, Number(onlineCountCache) || remotePlayers.size || 0);
+        text = `${count} People Online`;
+      }
+
+      if (multiText) multiText.textContent = text;
     }
 
     function syncLiveCounterVisibility() {}
 
-    function syncTopbar() {
-      bestText.textContent = best;
-      scoreText.textContent = score;
-      coinText.textContent = coins;
-      shieldText.textContent = shieldCharges;
-      nameText.textContent = playerName || 'Guest';
-      updateMultiplayerTimerText();
-      if (typeof renderPvpHud === 'function') renderPvpHud();
-    }
 
     function updateMultiplayerState() {
       if (Number(multiplayerEndTime || 0) > 0 && Date.now() >= Number(multiplayerEndTime || 0)) {
@@ -6334,19 +6306,13 @@
     }
 
     function getRemoteDuckScreenPos(p) {
-      const localScore = Number(score || 0);
-      const remoteScore = Number(p && p.score || 0);
-      const scoreGap = remoteScore - localScore;
-      const pipeGap = Math.abs(scoreGap);
-
-      if (pipeGap > 30) {
-        return { x: -9999, y: -9999, scoreGap, pipeGap };
-      }
-
-      const spread = clamp(Math.max(18, W * 0.035), 18, 34);
-      const x = clamp((Number(duck.x) || W * 0.25) + scoreGap * spread, 52, Math.max(52, W - 52));
+      const localProgress = Number(score || 0);
+      const remoteProgress = Number(p && (p.progress ?? p.score) || 0);
+      const progressGap = remoteProgress - localProgress;
+      const spread = clamp(Math.max(32, W * 0.11), 32, 84);
+      const x = clamp((Number(duck.x) || W * 0.25) + progressGap * spread, 52, Math.max(52, W - 52));
       const y = Number(p && p.y) || Number(duck.y) || H * 0.5;
-      return { x, y, scoreGap, pipeGap };
+      return { x, y, progressGap };
     }
 
     function isRemoteDuckVisible(p) {
@@ -6359,9 +6325,8 @@
         if (!sameRoom) return false;
       }
       const pos = getRemoteDuckScreenPos(p);
-      if (Math.abs(pos.pipeGap || 0) > 30) return false;
       const yGap = Math.abs((Number(pos.y) || 0) - (Number(duck.y) || 0));
-      return yGap <= (H + 160);
+      return Math.abs(pos.progressGap) <= REMOTE_PLAYER_MAX_PIPE_GAP || yGap <= (H + 160);
     }
 
     function pruneRemotePlayers(force = false) {
@@ -6383,8 +6348,13 @@
       if (!isRemoteDuckVisible(p)) return;
 
       const pos = getRemoteDuckScreenPos(p);
+      p.renderX = Number.isFinite(p.renderX) ? p.renderX : pos.x;
+      p.renderY = Number.isFinite(p.renderY) ? p.renderY : pos.y;
+      p.renderX += (pos.x - p.renderX) * 0.18;
+      p.renderY += (pos.y - p.renderY) * 0.18;
+
       const alpha = p.alive === false ? 0.45 : 0.82;
-      drawDuckAvatar(pos.x, pos.y, Number(p.rot) || 0, p.skin || 'classic', {
+      drawDuckAvatar(p.renderX, p.renderY, Number(p.rot) || 0, p.skin || 'classic', {
         alpha,
         pulse: 0,
         showShield: false
@@ -6395,7 +6365,7 @@
       ctx.fillStyle = '#fff';
       ctx.globalAlpha = p.alive === false ? 0.55 : 1;
       ctx.font = '800 12px system-ui, sans-serif';
-      ctx.fillText(p.username || 'Guest', pos.x, pos.y - 30);
+      ctx.fillText(p.username || 'Guest', p.renderX, p.renderY - 30);
       ctx.restore();
     }
 
@@ -6694,7 +6664,6 @@
       accountBackdrop.classList.add('open');
       accountBackdrop.setAttribute('aria-hidden', 'false');
       syncDifficultyFabVisibility();
-      syncLiveCounterVisibility();
     }
 
     function closeAccountModal(force = false) {
@@ -6703,7 +6672,6 @@
       accountBackdrop.classList.remove('open');
       accountBackdrop.setAttribute('aria-hidden', 'true');
       syncDifficultyFabVisibility();
-      syncLiveCounterVisibility();
       if (modalFreezeDepth > 0) unfreezeAfterModal();
     }
 
