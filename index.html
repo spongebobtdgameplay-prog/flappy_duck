@@ -1424,8 +1424,8 @@
 
     .pvp-invite-card {
       position: fixed;
-      left: 14px;
-      top: calc(var(--topbar-h) + 14px);
+      left: 50%;
+      top: calc(var(--topbar-h) + (100dvh - var(--topbar-h)) / 2);
       width: min(420px, 92vw);
       z-index: 14;
       pointer-events: auto;
@@ -1434,13 +1434,13 @@
       background: linear-gradient(180deg, rgba(12,18,34,0.98), rgba(9,14,26,0.95));
       border: 1px solid rgba(255,255,255,0.12);
       box-shadow: var(--shadow), var(--glow);
-      transform: translateX(-130%);
+      transform: translateX(-150%) translateY(-50%);
       opacity: 0;
       transition: transform 0.28s ease, opacity 0.28s ease;
     }
 
     .pvp-invite-card.open {
-      transform: translateX(0);
+      transform: translateX(-50%) translateY(-50%);
       opacity: 1;
     }
 
@@ -1455,6 +1455,72 @@
       font-size: 0.92rem;
       line-height: 1.35;
       margin-bottom: 10px;
+    }
+
+    .auth-glow-btn {
+      width: 100%;
+      margin-top: 10px;
+      animation: authGlow 1.2s infinite alternate;
+    }
+
+    @keyframes authGlow {
+      from { box-shadow: 0 0 10px rgba(255, 215, 0, 0.38), 0 10px 28px rgba(251, 191, 36, 0.16); }
+      to { box-shadow: 0 0 18px rgba(255, 215, 0, 0.92), 0 0 34px rgba(255, 215, 0, 0.5); }
+    }
+
+    .live-game-counter {
+      position: fixed;
+      left: 50%;
+      top: calc(var(--topbar-h) + 16px);
+      transform: translateX(-50%);
+      z-index: 15;
+      pointer-events: none;
+      min-width: min(420px, 92vw);
+      padding: 12px 16px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(12,18,34,0.96), rgba(9,14,26,0.92));
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: var(--shadow), var(--glow);
+      text-align: center;
+      backdrop-filter: blur(14px) saturate(1.15);
+    }
+
+    .live-game-counter-title {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.65);
+      font-weight: 900;
+    }
+
+    .live-game-counter-label {
+      font-size: 1.1rem;
+      font-weight: 900;
+      margin-top: 2px;
+      color: #fff;
+    }
+
+    .request-popup {
+      position: fixed;
+      left: 50%;
+      top: calc(var(--topbar-h) + (100dvh - var(--topbar-h)) / 2);
+      transform: translateX(-150%) translateY(-50%);
+      opacity: 0;
+      transition: transform 0.34s cubic-bezier(.22, 1, .36, 1), opacity 0.25s ease;
+      z-index: 16;
+      width: min(420px, 92vw);
+      pointer-events: auto;
+    }
+
+    .request-popup.open {
+      transform: translateX(-50%) translateY(-50%);
+      opacity: 1;
+    }
+
+    .online-empty {
+      color: var(--muted);
+      font-size: 0.92rem;
+      padding: 6px 2px;
     }
 
     .pvp-invite-actions {
@@ -1890,6 +1956,11 @@
 
     <canvas id="gameCanvas"></canvas>
 
+    <div id="liveGameCounterFrame" class="live-game-counter hidden" aria-hidden="true">
+      <div class="live-game-counter-title">LIVE GAME</div>
+      <div id="liveGameCounterLabel" class="live-game-counter-label">OFFLINE</div>
+    </div>
+
     <div id="overlay" class="overlay">
       <h1>Flappy Duck GOATED WITH MUTIPLAYER 🔥</h1>
       <p>Tap, click, or press Space to flap.</p>
@@ -1965,6 +2036,7 @@
         <p>3-16 characters. Letters, numbers, and spaces only.</p>
         <input id="usernameInput" class="name-input" type="text" maxlength="16" placeholder="DuckMaster" />
         <div id="nameError" class="name-error"></div>
+        <button id="openAuthBtn" class="btn-primary auth-glow-btn" type="button">LOG IN / SIGN UP</button>
         <div class="buttons" style="justify-content:flex-end; margin-top:12px;">
           <button id="saveNameBtn" class="btn-primary" type="button">Save Name</button>
         </div>
@@ -2254,6 +2326,14 @@
             <div id="multiplayerPlayers" class="multiplayer-list"></div>
           </div>
         </div>
+
+        <div class="panel">
+          <div class="info-box">
+            <h3>Online</h3>
+            <div class="tiny" id="onlineCountText">0 players online</div>
+            <div id="onlinePlayersBoard" class="multiplayer-list"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2353,6 +2433,11 @@
     const coinText = document.getElementById('coinText');
     const shieldText = document.getElementById('shieldText');
     const multiText = document.getElementById('multiText');
+    const liveGameCounterFrame = document.getElementById('liveGameCounterFrame');
+    const liveGameCounterLabel = document.getElementById('liveGameCounterLabel');
+    const onlineCountText = document.getElementById('onlineCountText');
+    const onlinePlayersBoard = document.getElementById('onlinePlayersBoard');
+    const openAuthBtn = document.getElementById('openAuthBtn');
     const nameText = document.getElementById('nameText');
     const overlay = document.getElementById('overlay');
     const themeBtn = document.getElementById('themeBtn');
@@ -2581,8 +2666,8 @@
       boosts: [
         { id: 'shield', name: 'Shield', emoji: '🛡️', cost: 22, desc: 'Survive one crash.' },
         { id: 'magnet', name: 'Coin Magnet', emoji: '🧲', cost: 20, desc: 'Pull coins toward you for a run.' },
-        { id: 'slowmo', name: 'Slow Time', emoji: '⏱️', cost: 16, desc: 'Pipe speed gets calmer for a run.' }
-        --//{ id: 'burst', name: 'Coin Burst', emoji: '💰', cost: 28, desc: 'Instant bonus coins.' }
+        { id: 'slowmo', name: 'Slow Time', emoji: '⏱️', cost: 16, desc: 'Pipe speed gets calmer for a run.' },
+        { id: 'burst', name: 'Coin Burst', emoji: '💰', cost: 28, desc: 'Instant bonus coins.' }
       ]
     };
 
@@ -2862,6 +2947,8 @@
       setTimeout(() => card.remove(), 7000);
     }
     let multiplayerSocket = null;
+    let onlinePlayersCache = [];
+    let onlineCountCache = 0;
     let multiplayerConnected = false;
     let multiplayerLastEmit = 0;
     let multiplayerJoinSent = false;
@@ -3273,6 +3360,40 @@
       if (typeof renderPvpHud === 'function') renderPvpHud();
     }
 
+    function renderOnlinePanel() {
+      const listEl = onlinePlayersBoard || document.getElementById('onlinePlayersBoard');
+      const countEl = onlineCountText || document.getElementById('onlineCountText');
+      if (countEl) {
+        const count = Math.max(0, Number(onlineCountCache) || 0);
+        countEl.textContent = count === 1 ? '1 player online' : `${count} players online`;
+      }
+      if (!listEl) return;
+
+      const list = Array.isArray(onlinePlayersCache) ? onlinePlayersCache : [];
+      listEl.innerHTML = '';
+
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'online-empty';
+        empty.textContent = multiplayerConnected ? 'No one has joined yet.' : 'Waiting for the server.';
+        listEl.appendChild(empty);
+        return;
+      }
+
+      list.slice(0, 24).forEach((player) => {
+        const row = document.createElement('div');
+        row.className = 'multiplayer-row';
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(String(player.username || 'Guest'))}</strong>
+            <div class="tiny">${escapeHtml(String(player.id || '').slice(0, 8) || 'player')}</div>
+          </div>
+          <div><span class="team-chip">${player.pvpActive ? 'PvP' : 'Online'}</span></div>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+
 
     function setupMultiplayerSocket() {
       if (multiplayerSocket || typeof io !== 'function') return;
@@ -3363,6 +3484,17 @@
       multiplayerSocket.on('player-disconnected', (id) => {
         remotePlayers.delete(String(id || ''));
         renderMultiplayerPanel();
+      });
+
+      multiplayerSocket.on('onlineCount', (count) => {
+        onlineCountCache = Math.max(0, Number(count) || 0);
+        renderOnlinePanel();
+        updateMultiplayerTimerText();
+      });
+
+      multiplayerSocket.on('onlinePlayers', (payload) => {
+        onlinePlayersCache = Array.isArray(payload) ? payload : [];
+        renderOnlinePanel();
       });
 
       multiplayerSocket.on('pvp-invite', handlePvpIncomingInvite);
@@ -4175,7 +4307,7 @@
 
       google.script.run
         .withSuccessHandler((data) => {
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
           suggestionLoading = false;
           suggestionData = data || { categories: ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'], suggestions: [] };
           suggestionData.categories = normalizeSuggestionCategories(suggestionData.categories);
@@ -4183,7 +4315,7 @@
           renderSuggestionPanel();
         })
         .withFailureHandler((err) => {
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
           suggestionLoading = false;
           console.error(err);
           toastMsg('Could not load suggestions.');
@@ -4717,7 +4849,7 @@
       google.script.run
         .withSuccessHandler((res) => {
           suggestionVoteBusy = false;
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
 
           if (!res || !res.ok) {
             toastMsg((res && res.error) ? res.error : 'Could not update suggestion.');
@@ -4731,7 +4863,7 @@
         })
         .withFailureHandler((err) => {
           suggestionVoteBusy = false;
-          if (requestId !== suggestionVoteSeq) return;
+          if (requestId !== suggestionRequestSeq) return;
           console.error(err);
           toastMsg('Could not update suggestion.');
         })
@@ -4755,6 +4887,7 @@
       nameBackdrop.classList.add('open');
       nameBackdrop.setAttribute('aria-hidden', 'false');
       syncDifficultyFabVisibility();
+      syncLiveCounterVisibility();
       setTimeout(() => usernameInput.focus(), 0);
     }
 
@@ -4762,6 +4895,7 @@
       nameBackdrop.classList.remove('open');
       nameBackdrop.setAttribute('aria-hidden', 'true');
       syncDifficultyFabVisibility();
+      syncLiveCounterVisibility();
       unfreezeAfterModal();
     }
 
@@ -4940,25 +5074,33 @@
     }
 
     function updateMultiplayerTimerText() {
-      if (!multiText) return;
+      const liveLabel = liveGameCounterLabel || document.getElementById('liveGameCounterLabel');
+      let text = 'OFFLINE';
 
       if (pvpMatchActive && Number(pvpMatchEndsAt || 0) > Date.now()) {
         const leftMs = Math.max(0, Number(pvpMatchEndsAt || 0) - Date.now());
-        multiText.textContent = `PVP ${formatLongTimer_(leftMs)}`;
-        return;
-      }
-
-      if (multiplayerConnected) {
-        multiText.textContent = 'LIVE';
-        return;
-      }
-
-      if (Number(multiplayerEndTime || 0) > Date.now()) {
+        text = `PVP ${formatLongTimer_(leftMs)}`;
+      } else if (multiplayerConnected) {
+        const count = Math.max(1, Number(onlineCountCache) || (remotePlayers.size + 1) || 1);
+        text = `ONLINE ${count}`;
+      } else if (Number(multiplayerEndTime || 0) > Date.now()) {
         const leftMs = Math.max(0, Number(multiplayerEndTime || 0) - Date.now());
-        multiText.textContent = formatLongTimer_(leftMs);
+        text = formatLongTimer_(leftMs);
       } else {
-        multiText.textContent = 'OFF';
+        text = 'OFF';
       }
+
+      if (multiText) multiText.textContent = text;
+      if (liveLabel) liveLabel.textContent = text;
+      syncLiveCounterVisibility();
+    }
+
+    function syncLiveCounterVisibility() {
+      const liveFrame = liveGameCounterFrame || document.getElementById('liveGameCounterFrame');
+      if (!liveFrame) return;
+      const hidden = Boolean(document.querySelector('.shop-backdrop.open, .report-backdrop.open, .difficulty-backdrop.open, .pvp-backdrop.open'));
+      liveFrame.classList.toggle('hidden', hidden);
+      liveFrame.setAttribute('aria-hidden', hidden ? 'true' : 'false');
     }
 
     function syncTopbar() {
@@ -6290,6 +6432,7 @@
       }
       updateMultiplayerState();
       pruneRemotePlayers();
+      updateMultiplayerTimerText();
       if (multiplayerActive && multiplayerEndTime > Date.now()) {
         roomSyncTimer += dt;
         if (roomSyncTimer >= 0.25) {
@@ -6485,8 +6628,8 @@
         { label: 'Coins', value: coins, icon: '🪙' },
         { label: 'Shield Charges', value: shieldCharges, icon: '🛡️' },
         { label: 'Magnet Timer', value: `${magnetTimer.toFixed(1)}s`, icon: '🧲' },
-        { label: 'Slow Time Timer', value: `${slowmoTimer.toFixed(1)}s`, icon: '⏱️' }
-        --//{ label: 'Coin Burst', value: inventory.burst || 0, icon: '💰' }
+        { label: 'Slow Time Timer', value: `${slowmoTimer.toFixed(1)}s`, icon: '⏱️' },
+        { label: 'Coin Burst', value: inventory.burst || 0, icon: '💰' }
       ];
 
       for (const c of invCards) {
@@ -6538,6 +6681,7 @@
       accountBackdrop.classList.add('open');
       accountBackdrop.setAttribute('aria-hidden', 'false');
       syncDifficultyFabVisibility();
+      syncLiveCounterVisibility();
     }
 
     function closeAccountModal() {
@@ -6545,6 +6689,7 @@
       accountBackdrop.classList.remove('open');
       accountBackdrop.setAttribute('aria-hidden', 'true');
       syncDifficultyFabVisibility();
+      syncLiveCounterVisibility();
     }
 
     function syncHackerTargets(accounts) {
