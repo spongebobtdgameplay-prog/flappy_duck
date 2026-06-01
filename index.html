@@ -2564,18 +2564,18 @@
 
       getLeaderboards: { url: '/api/leaderboards', method: 'GET' },
       getChatMessages: { url: '/api/chat', method: 'GET' },
-      postChatMessage: { url: '/api/chat/send', method: 'POST' },
+      postChatMessage: { url: '/api/chat/send', method: 'POST', encode: (args) => ({ message: args[0] }) },
 
       getReportData: { url: '/api/reports', method: 'GET' },
-      submitReport: { url: '/api/reports/send', method: 'POST' },
-      voteReport: { url: '/api/reports/vote', method: 'POST' },
+      submitReport: { url: '/api/reports/send', method: 'POST', encode: (args) => (args[0] && typeof args[0] === 'object' ? args[0] : { category: '', title: '', details: '' }) },
+      voteReport: { url: '/api/reports/vote', method: 'POST', encode: (args) => ({ reportId: args[0], reaction: args[1] }) },
       getAccountListForModeration: { url: '/api/moderation/accounts', method: 'GET' },
       banAccountById: { url: '/api/moderation/ban-account', method: 'POST', encode: (args) => ({ accountId: args[0], reason: args[1] }) },
 
       getSuggestionData: { url: '/api/suggestions', method: 'GET' },
-      submitSuggestion: { url: '/api/suggestions/send', method: 'POST' },
-      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST' },
-      commentSuggestion: { url: '/api/suggestions/comment', method: 'POST' },
+      submitSuggestion: { url: '/api/suggestions/send', method: 'POST', encode: (args) => (args[0] && typeof args[0] === 'object' ? args[0] : { category: '', title: '', details: '' }) },
+      voteSuggestion: { url: '/api/suggestions/vote', method: 'POST', encode: (args) => ({ suggestionId: args[0], reaction: args[1] }) },
+      commentSuggestion: { url: '/api/suggestions/comment', method: 'POST', encode: (args) => (args[0] && typeof args[0] === 'object' ? args[0] : { suggestionId: args[0], parentId: args[1], text: args[2] }) },
 
       getTeamData: { url: '/api/teams', method: 'GET' },
       createTeam: { url: '/api/teams/create', method: 'POST' },
@@ -4795,11 +4795,18 @@
       const category = String(reportCategoryInput.value || 'Other').trim();
       const title = String(reportTitleInput.value || '').trim();
       const details = String(reportDetailsInput.value || '').trim();
+      const selectedOption = hackerTargetSelect && hackerTargetSelect.selectedIndex >= 0 ? hackerTargetSelect.options[hackerTargetSelect.selectedIndex] : null;
       const targetAccountId = String(hackerTargetSelect && hackerTargetSelect.value || '').trim();
-      const targetUsername = String(hackerTargetSelect && hackerTargetSelect.options && hackerTargetSelect.selectedIndex >= 0 ? hackerTargetSelect.options[hackerTargetSelect.selectedIndex].textContent : '').trim();
+      const targetUsername = String(selectedOption && selectedOption.textContent || '').replace(/\s*\(#.*$/, '').replace(/\s*\[BANNED\]$/, '').trim();
 
       if (!title && !details) {
         toastMsg('Write a report first.');
+        return;
+      }
+
+      if (category === 'Hacker' && !targetAccountId) {
+        toastMsg('Select a hacker account first.');
+        hackerTargetSelect?.focus();
         return;
       }
 
@@ -4815,6 +4822,7 @@
           toastMsg(res.message || 'Report submitted.');
           reportTitleInput.value = '';
           reportDetailsInput.value = '';
+          if (hackerTargetSelect) hackerTargetSelect.value = '';
           loadReportData(true);
         })
         .withFailureHandler((err) => {
