@@ -928,6 +928,13 @@ app.post('/api/reports/ban-target', (req, res) => {
 });
 
 app.get('/api/suggestions', (req, res) => res.json(getSuggestionData(req)));
+
+function extractSuggestionId(body, fallback = '') {
+  if (typeof body === 'string') return String(body || fallback).trim();
+  if (!body || typeof body !== 'object') return String(fallback || '').trim();
+  return String(getBodyValue(body, ['suggestionId', 'id'], fallback)).trim();
+}
+
 app.post('/api/suggestions/send', (req, res) => {
   try {
     const account = currentAccount(req);
@@ -948,11 +955,12 @@ app.post('/api/suggestions/send', (req, res) => {
     res.status(500).json({ ok: false, error: 'Server error.' });
   }
 });
+
 app.post('/api/suggestions/vote', (req, res) => {
   try {
     const account = currentAccount(req);
     if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-    const suggestionId = String(getBodyValue(req.body, ['suggestionId', 'id'], '')).trim();
+    const suggestionId = extractSuggestionId(req.body);
     const vote = String(getBodyValue(req.body, ['reaction', 'vote', 'type'], '')).trim().toLowerCase();
     if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion id.' });
     if (vote !== 'heart' && vote !== 'dislike') return res.json({ ok: false, error: 'Invalid vote.' });
@@ -967,14 +975,15 @@ app.post('/api/suggestions/vote', (req, res) => {
     res.status(500).json({ ok: false, error: 'Server error.' });
   }
 });
+
 app.post('/api/suggestions/comment', (req, res) => {
   try {
     const account = currentAccount(req);
     if (!account) return res.json({ ok: false, error: 'Please log in first.' });
-    const suggestionId = String(getBodyValue(req.body, ['suggestionId'], '')).trim();
+    const suggestionId = extractSuggestionId(req.body);
     const parentId = String(getBodyValue(req.body, ['parentId'], '')).trim();
     const text = sanitizeText(getBodyValue(req.body, ['text'], ''), 240);
-    if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion.' });
+    if (!suggestionId) return res.json({ ok: false, error: 'Missing suggestion id.' });
     if (!text) return res.json({ ok: false, error: 'Comment cannot be empty.' });
     const data = readData();
     const suggestion = (data.suggestions || []).find(s => String(s.id) === suggestionId);
