@@ -3257,11 +3257,33 @@
       const mode = normalizePvpMode(pvpMode);
       multiplayerSocket.emit('pvp-create-lobby', { mode, durationMs });
 
+      const successes = [];
+      const failures = [];
+      let remaining = targets.length;
+
+      const finish = () => {
+        if (remaining > 0) return;
+        if (successes.length && !failures.length) {
+          toastMsg(`PvP request sent to ${successes.join(', ')}.`);
+        } else if (successes.length && failures.length) {
+          toastMsg(`Sent to ${successes.join(', ')}. Failed: ${failures.join(' | ')}`);
+        } else {
+          toastMsg(`PvP request failed: ${failures.join(' | ') || 'No players accepted the invite.'}`);
+        }
+      };
+
       targets.forEach((targetUsername) => {
-        multiplayerSocket.emit('pvp-request', { targetUsername, mode, durationMs });
+        multiplayerSocket.emit('pvp-request', { targetUsername, mode, durationMs }, (res) => {
+          if (res && res.ok) {
+            successes.push(targetUsername);
+          } else {
+            failures.push(`${targetUsername}${res && res.error ? `: ${res.error}` : ''}`);
+          }
+          remaining -= 1;
+          finish();
+        });
       });
 
-      toastMsg(`PvP request sent to ${targets.join(', ')}.`);
       openPvpPanel();
     }
 
@@ -3504,6 +3526,9 @@
         onlinePlayersCache = Array.isArray(payload) ? payload : [];
         renderOnlinePanel();
       });
+      multiplayerSocket.on('chat-message', () => {
+        if (chatOpen) loadChatMessages();
+      });
       multiplayerSocket.on('pvp-invite', handlePvpIncomingInvite);
       multiplayerSocket.on('pvp-room-invite', handlePvpIncomingInvite);
 
@@ -3535,12 +3560,17 @@
       multiplayerSocket.on('pvp-match-end', (result) => {
         endPvpMatchLocal(result);
       });
+      multiplayerSocket.on('pvp-match-ended', (result) => {
+        endPvpMatchLocal(result);
+      });
 
-      multiplayerSocket.on('pvp-request-declined', (payload) => {
-        if (payload && String(payload.hostId || '') === String(multiplayerSocket.id || '')) {
+      const onPvpDeclined = (payload) => {
+        if (payload && String(payload.hostId || payload.roomId || '') === String(multiplayerSocket.id || '')) {
           toastMsg(`${payload.username || 'A player'} declined the PVP request.`);
         }
-      });
+      };
+      multiplayerSocket.on('pvp-request-declined', onPvpDeclined);
+      multiplayerSocket.on('pvp-invite-declined', onPvpDeclined);
     }
 
     function sendDeathToServer() {
@@ -3759,12 +3789,26 @@
       nameText.textContent = playerName;
     }
 
+    function getResumeDelaySeconds() {
+      const currentSpeed = Math.max(120, Number(speed || 0) || (getDifficultyConfig().startSpeed || DEFAULT_START_SPEED));
+      return clamp(180 / currentSpeed, 0.55, 1.1);
+    }
+
     function freezeForModal() {
       modalFreezeDepth += 1;
       if (modalFreezeDepth === 1) {
-        modalResumeState = state;
-        if (state === 'playing') {
+        if (state === 'countdown') {
+          state = 'paused';
+          resumeCountdown = 0;
+          modalResumeState = 'playing';
+          overlay.classList.remove('hidden');
+          setPauseButtonLabel();
+          updateOverlayForState();
+        } else if (state === 'playing') {
+          modalResumeState = 'playing';
           pauseGame();
+        } else {
+          modalResumeState = '';
         }
       }
       updateDifficultyFabVisibility();
@@ -3776,7 +3820,7 @@
         const shouldResume = modalResumeState === 'playing' && state === 'paused';
         modalResumeState = '';
         if (shouldResume) {
-          resumeGameWithDelay(5);
+          resumeGameWithDelay(getResumeDelaySeconds());
         }
       }
       updateDifficultyFabVisibility();
@@ -5431,15 +5475,16 @@
     function pauseGame() {
       if (state !== 'playing') return;
       state = 'paused';
+      resumeCountdown = 0;
       overlay.classList.remove('hidden');
       setPauseButtonLabel();
       updateOverlayForState();
     }
 
-    function resumeGameWithDelay(seconds = 5) {
-      if (state !== 'paused') return;
+    function resumeGameWithDelay(seconds = getResumeDelaySeconds()) {
+      if (state !== 'paused' && state !== 'countdown') return;
       state = 'countdown';
-      resumeCountdown = seconds;
+      resumeCountdown = clamp(Number(seconds) || getResumeDelaySeconds(), 0.35, 2.0);
       overlay.classList.remove('hidden');
       setPauseButtonLabel();
       updateOverlayForState();
@@ -5449,7 +5494,12 @@
       if (state === 'playing') {
         pauseGame();
       } else if (state === 'paused') {
-        resumeGameWithDelay(5);
+        resumeGameWithDelay();
+      } else if (state === 'countdown') {
+        state = 'paused';
+        resumeCountdown = 0;
+        setPauseButtonLabel();
+        updateOverlayForState();
       }
     }
 
@@ -6856,7 +6906,9 @@
     }
 
     function renderChat(messages) {
-      const list = Array.isArray(messages) ? messages : [];
+      const list = Array.isArray(messages)
+        ? messages
+        : (messages && Array.isArray(messages.messages) ? messages.messages : []);
       const signature = JSON.stringify(list);
       if (signature === chatLastRender && chatOpen) return;
       chatLastRender = signature;
@@ -6908,7 +6960,7 @@
       google.script.run
         .withSuccessHandler((msgs) => {
           chatLoading = false;
-          if (chatOpen) renderChat(msgs);
+          if (chatOpen) renderChat(msgs && Array.isArray(msgs.messages) ? msgs.messages : (msgs && Array.isArray(msgs.chat) ? msgs.chat : msgs));
         })
         .withFailureHandler((err) => {
           chatLoading = false;
@@ -6973,7 +7025,7 @@
           }
 
           chatInput.value = '';
-          renderChat(res.messages || []);
+          renderChat(res && Array.isArray(res.messages) ? res.messages : (res && Array.isArray(res.chat) ? res.chat : []));
         })
         .withFailureHandler((err) => {
           chatSendPending = false;
@@ -6994,7 +7046,7 @@
             leaderboards = res.leaderboards;
             renderLeaderboards();
           }
-          if (res.chat) renderChat(res.chat);
+          if (res.chat) renderChat(res.chat.messages || res.chat);
           if (res.reports) {
             reportData = res.reports;
             reportData.categories = normalizeReportCategories(reportData.categories);
