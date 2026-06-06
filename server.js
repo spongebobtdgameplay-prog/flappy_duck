@@ -705,7 +705,10 @@ function endPvpRoom(room, reason = 'time') {
     }
   }
   const payload = { roomId: room.id, reason, mode: room.mode, reward, winner: winner ? { socketId: winner.socketId, accountId: winner.accountId, username: winner.username, score: Number(winner.score || 0) } : null, board: sorted.map((p, i) => ({ rank: i + 1, socketId: p.socketId, accountId: p.accountId, username: p.username, score: Number(p.score || 0) })) };
-  for (const p of room.players) io.to(p.socketId).emit('pvp-match-ended', payload);
+  for (const p of room.players) {
+    io.to(p.socketId).emit('pvp-match-ended', payload);
+    io.to(p.socketId).emit('pvp-match-end', payload);
+  }
   pvpRooms.delete(room.id);
 }
 function startPvpTimer(room) { clearTimeout(room.timer); room.timer = setTimeout(() => endPvpRoom(room, 'time'), clampPvpDuration(room.durationMs)); }
@@ -1345,7 +1348,12 @@ io.on('connection', (socket) => {
     const room = pvpRooms.get(String(roomId || ''));
     const me = getConnectedPlayer(socket.id) || { accountId: socket.data.playerInfo.accountId || '', username: socket.data.playerInfo.username || 'Guest' };
     if (!room) { if (typeof ack === 'function') ack({ ok: false, error: 'Room not found.' }); return; }
-    if (!accept) { io.to(room.hostSocketId).emit('pvp-invite-declined', { roomId: room.id, username: me.username || 'Guest' }); if (typeof ack === 'function') ack({ ok: true }); return; }
+    if (!accept) {
+      io.to(room.hostSocketId).emit('pvp-invite-declined', { roomId: room.id, username: me.username || 'Guest', hostId: room.hostSocketId });
+      io.to(room.hostSocketId).emit('pvp-request-declined', { roomId: room.id, username: me.username || 'Guest', hostId: room.hostSocketId });
+      if (typeof ack === 'function') ack({ ok: true });
+      return;
+    }
     if (room.players.length >= PVP_MAX_PLAYERS) { if (typeof ack === 'function') ack({ ok: false, error: 'PvP room is full.' }); return; }
     const wasInPvp = Boolean(socket.data.inPvp);
     const ok = joinPvpRoom(room, socket.id, { accountId: me.accountId || '', username: me.username || 'Guest' });
