@@ -213,7 +213,6 @@ function publicAccount(account) {
     warBestRecorded: Number(account.warBestRecorded || 0),
     warCoinsRecorded: Number(account.warCoinsRecorded || 0),
     blockPvpRequests: Boolean(account.blockPvpRequests || false),
-    coinMultiplierBoosts: normalizeCoinMultiplierBoosts(account.coinMultiplierBoosts),
     moderator: false
   };
 }
@@ -493,7 +492,7 @@ function getGameDataForAccount(account) {
       inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 },
       ownedSkins: ['classic'], activeSkin: 'classic', theme: 'day', shieldCharges: 0,
       username: '', teamId: '', eventClaims: [], warBestRecorded: 0, warCoinsRecorded: 0,
-      playerKey: '', moderator: false, blockPvpRequests: false, coinMultiplierBoosts: []
+      playerKey: '', moderator: false, blockPvpRequests: false
     };
   }
   const data = publicAccount(account);
@@ -519,27 +518,6 @@ function normalizeSkins(skins) {
   }
   if (!out.includes('classic')) out.unshift('classic');
   return out;
-}
-
-function normalizeCoinMultiplierBoosts(boosts) {
-  const now = Date.now();
-  const list = Array.isArray(boosts) ? boosts : [];
-  return list
-    .map((item) => {
-      const expiresAt = Math.max(0, Number(item && item.expiresAt) || 0);
-      const amount = Math.max(1, Number(item && item.amount) || 1);
-      const multiplier = Math.max(1, Number(item && item.multiplier) || 1);
-      return {
-        id: String(item && item.id || crypto.randomUUID()),
-        createdAt: Math.max(0, Number(item && item.createdAt) || now),
-        expiresAt,
-        seconds: Math.max(60, Number(item && item.seconds) || 60),
-        amount,
-        multiplier
-      };
-    })
-    .filter((item) => item.expiresAt > now)
-    .sort((a, b) => a.expiresAt - b.expiresAt);
 }
 
 function getReportData(req) {
@@ -620,7 +598,12 @@ function createTeam(data, req) {
 
 function voteReactionTarget(item, vote, key) {
   item.reactions = item.reactions && typeof item.reactions === 'object' ? item.reactions : {};
-  item.reactions[key] = vote;
+  const current = String(item.reactions[key] || '');
+  if (current === vote) {
+    delete item.reactions[key];
+  } else {
+    item.reactions[key] = vote;
+  }
   recalcVotes(item);
 }
 
@@ -757,7 +740,7 @@ app.post('/api/register', (req, res) => {
   const data = readData();
   if (findAccountByUsername(data, username)) return res.json({ ok: false, error: 'That username already exists.' });
   const nextId = data.accounts.length ? Math.max(...data.accounts.map(a => Number(a.accountId) || 0)) + 1 : 1;
-  const account = { accountId: String(nextId), username, passHash: hashPassword(password), createdAt: Date.now(), lastLoginAt: Date.now(), banned: false, banReason: '', best: 0, coins: 0, inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 }, ownedSkins: ['classic'], activeSkin: 'classic', theme: 'day', shieldCharges: 0, teamId: '', eventClaims: [], warBestRecorded: 0, warCoinsRecorded: 0, blockPvpRequests: false, coinMultiplierBoosts: [] };
+  const account = { accountId: String(nextId), username, passHash: hashPassword(password), createdAt: Date.now(), lastLoginAt: Date.now(), banned: false, banReason: '', best: 0, coins: 0, inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 }, ownedSkins: ['classic'], activeSkin: 'classic', theme: 'day', shieldCharges: 0, teamId: '', eventClaims: [], warBestRecorded: 0, warCoinsRecorded: 0, blockPvpRequests: false };
   data.accounts.push(account);
   writeData(data);
   setAuthCookie(res, account.accountId);
@@ -837,7 +820,6 @@ app.post(['/api/game/save', '/api/save', '/api/save-game', '/api/game-data/save'
   account.warBestRecorded = Math.max(0, Number(incoming.warBestRecorded ?? account.warBestRecorded) || 0);
   account.warCoinsRecorded = Math.max(0, Number(incoming.warCoinsRecorded ?? account.warCoinsRecorded) || 0);
   account.blockPvpRequests = Boolean(incoming.blockPvpRequests ?? account.blockPvpRequests ?? false);
-  account.coinMultiplierBoosts = normalizeCoinMultiplierBoosts(incoming.coinMultiplierBoosts || account.coinMultiplierBoosts);
   const data = readData();
   const idx = data.accounts.findIndex(a => String(a.accountId) === String(account.accountId));
   if (idx >= 0) data.accounts[idx] = account;
@@ -906,9 +888,10 @@ app.post('/api/reports/send', (req, res) => {
     const targetAccountId = String(getBodyValue(req.body, ['targetAccountId'], '')).trim();
     const targetUsername = sanitizeUsername(getBodyValue(req.body, ['targetUsername'], ''));
     if (!title && !details) return res.json({ ok: false, error: 'Report cannot be empty.' });
+    if (category === 'Hacker' && !targetAccountId) return res.json({ ok: false, error: 'Select a hacker account.' });
     const data = readData();
     data.reports = Array.isArray(data.reports) ? data.reports : [];
-    data.reports.push({ id: crypto.randomUUID(), category, title: title || details.slice(0, 48) || 'Report', details: details || title, username: sanitizeUsername(account.username) || 'Guest', key: String(account.accountId || ''), createdAt: Date.now(), reactions: {}, targetAccountId: targetAccountId || '', targetUsername: targetUsername || '' });
+    data.reports.push({ id: crypto.randomUUID(), category, title: title || details.slice(0, 48) || 'Report', details: details || title, username: sanitizeUsername(account.username) || 'Guest', key: String(account.accountId || ''), createdAt: Date.now(), reactions: {}, targetAccountId: category === 'Hacker' ? (targetAccountId || '') : '', targetUsername: category === 'Hacker' ? (targetUsername || '') : '' });
     if (data.reports.length > REPORT_MAX) data.reports = data.reports.slice(-REPORT_MAX);
     writeData(data);
     res.json({ ok: true, message: 'Report submitted.', data: { categories: REPORT_CATEGORIES.slice(), reports: (data.reports || []).map(r => summarizeReport(r, getAuthAccountId(req))) } });
@@ -1242,10 +1225,9 @@ app.post('/api/events/claim', (req, res) => {
 });
 
 app.get('/api/moderation/accounts', (req, res) => {
-  const account = currentAccount(req);
-  if (!account) return res.json({ ok: false, error: 'Please log in first.' });
+  if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
   const data = readData();
-  res.json({ ok: true, accounts: (data.accounts || []).map(a => ({ accountId: String(a.accountId || ''), username: String(a.username || 'Guest') })) });
+  res.json({ ok: true, accounts: (data.accounts || []).map(a => ({ accountId: String(a.accountId || ''), username: String(a.username || 'Guest'), banned: Boolean(a.banned), banReason: String(a.banReason || ''), createdAt: Number(a.createdAt || 0), lastLoginAt: Number(a.lastLoginAt || 0) })) });
 });
 app.post('/api/moderation/ban-account', (req, res) => {
   if (!isAdminRequest(req)) return res.json({ ok: false, error: 'Not authorized.' });
