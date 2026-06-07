@@ -1362,8 +1362,8 @@
     }
 
     .pvp-room-card {
-      padding: 12px;
-      border-radius: 18px;
+      padding: 14px;
+      border-radius: 20px;
       border: 1px solid rgba(255,255,255,0.10);
       background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.10);
@@ -1401,8 +1401,8 @@
     .pvp-hud.open { display: block; }
 
     .pvp-hud-card {
-      padding: 12px 14px;
-      border-radius: 20px;
+      padding: 14px 16px;
+      border-radius: 22px;
       background: linear-gradient(180deg, rgba(12,18,34,0.98), rgba(9,14,26,0.94));
       border: 1px solid rgba(255,255,255,0.10);
       box-shadow: var(--shadow-soft), var(--glow);
@@ -1460,13 +1460,13 @@
 
     .pvp-invite-title {
       font-weight: 900;
-      font-size: 1.02rem;
-      margin-bottom: 4px;
+      font-size: 1.08rem;
+      margin-bottom: 6px;
     }
 
     .pvp-invite-text {
       color: var(--muted);
-      font-size: 0.92rem;
+      font-size: 1rem;
       line-height: 1.35;
       margin-bottom: 10px;
     }
@@ -2813,7 +2813,7 @@
     let myPlayerKey = '';
     let roomState = null;
     const remotePlayers = new Map();
-    const REMOTE_PLAYER_TIMEOUT_MS = 12000;
+    const REMOTE_PLAYER_TIMEOUT_MS = 60000;
     const REMOTE_PLAYER_DRAW_DISTANCE = 900;
     const gnomes = [];
     let lastDeathReason = 'fell to their death';
@@ -2962,7 +2962,7 @@
     let multiplayerConnected = false;
     let multiplayerLastEmit = 0;
     let multiplayerJoinSent = false;
-    const REMOTE_PLAYER_MAX_PIPE_GAP = 30;
+    const REMOTE_PLAYER_MAX_PIPE_GAP = 120;
 
     let pvpRoom = null;
     let pvpMode = 'normal';
@@ -3013,8 +3013,13 @@
         pvpDurationValue.disabled = locked;
       }
       if (pvpDurationLabel) pvpDurationLabel.textContent = `${clampPvpDurationSec(pvpDurationInput ? pvpDurationInput.value : 60)}s`;
-      if (pvpRequestBtn) pvpRequestBtn.disabled = !Boolean(multiplayerConnected);
+      if (pvpRequestBtn) pvpRequestBtn.disabled = !Boolean(multiplayerConnected) || locked;
       if (pvpStartBtn) pvpStartBtn.disabled = locked || !pvpRoom || !pvpRoom.id || String(pvpRoom.hostSocketId || '') !== String(multiplayerSocket && multiplayerSocket.id ? multiplayerSocket.id : '');
+      if (pvpLeaveBtn) {
+        const hasRoom = Boolean(pvpRoom && pvpRoom.id);
+        pvpLeaveBtn.style.display = hasRoom ? '' : 'none';
+        pvpLeaveBtn.disabled = !hasRoom;
+      }
       if (settingsBlockPvpToggle) settingsBlockPvpToggle.checked = Boolean(blockPvpRequests);
     }
 
@@ -3025,6 +3030,10 @@
       if (pvpModeButtons.length) {
         pvpModeButtons.forEach((btn) => {
           btn.addEventListener('click', () => {
+            if (pvpMatchActive || (pvpRoom && pvpRoom.status === 'running')) {
+              toastMsg('Difficulty is locked during a match.');
+              return;
+            }
             pvpMode = normalizePvpMode(btn.dataset.pvpMode);
             updatePvpControlsUi();
             renderPvpLobby();
@@ -3098,11 +3107,13 @@
         pvpInviteText.textContent = `${pvpInvitePacket.hostUsername} wants a PvP match. Mode: ${pvpModeLabel(pvpInvitePacket.mode)} · Time: ${clampPvpDurationSec((pvpInvitePacket.durationMs || 60000) / 1000)}s`;
       }
       setPvpInviteVisible(true);
+      syncDifficultyFabVisibility();
     }
 
     function updatePvpFromRemoteState(room) {
       if (!room) {
         if (!pvpMatchActive) pvpRoom = null;
+        updatePvpControlsUi();
         renderPvpLobby();
         renderPvpHud();
         return;
@@ -3121,6 +3132,7 @@
           accountId: String(p.accountId || ''),
           username: String(p.username || p.name || 'Guest'),
           score: Number(p.score || 0),
+          best: Number(p.best || p.score || 0),
           ready: Boolean(p.ready)
         })) : []
       };
@@ -3138,6 +3150,8 @@
       updatePvpFromRemoteState(room);
       pvpMatchActive = true;
       pvpMatchEndsAt = Number(pvpRoom && pvpRoom.startedAt ? pvpRoom.startedAt + pvpRoom.durationMs : (room && room.startedAt ? room.startedAt + room.durationMs : 0));
+      updatePvpControlsUi();
+      renderPvpLobby();
       renderPvpHud();
       toastMsg(`PvP started: ${pvpModeLabel(pvpMode)}.`);
     }
@@ -3148,6 +3162,7 @@
       const myId = String(multiplayerSocket && multiplayerSocket.id ? multiplayerSocket.id : '');
       pvpMatchActive = false;
       pvpMatchEndsAt = 0;
+      updatePvpControlsUi();
       if (winner) {
         toastMsg(winner.socketId === myId ? `You won the PvP! +${reward} coins.` : `${winner.username || 'A player'} won the PvP.`);
       } else {
@@ -3156,6 +3171,7 @@
       renderPvpHud();
       renderPvpLobby();
       updateMultiplayerTimerText();
+      closePvpPanel();
     }
 
     function renderPvpLobby() {
@@ -3169,6 +3185,10 @@
         empty.className = 'pvp-room-card';
         empty.innerHTML = `<strong>No active PvP room</strong><div class="tiny">Open PvP, choose a mode, and request players.</div>`;
         pvpRoomInfo.appendChild(empty);
+        if (pvpLeaveBtn) {
+          pvpLeaveBtn.style.display = 'none';
+          pvpLeaveBtn.disabled = true;
+        }
         return;
       }
 
@@ -3330,9 +3350,11 @@
       pvpRoom = null;
       pvpMatchActive = false;
       pvpMatchEndsAt = 0;
+      updatePvpControlsUi();
       renderPvpLobby();
       renderPvpHud();
       updateMultiplayerTimerText();
+      closePvpPanel();
       toastMsg('Left PvP.');
     }
 
@@ -3557,11 +3579,13 @@
           accountId: String(row.accountId || ''),
           username: String(row.username || 'Guest'),
           score: Number(row.score || 0),
+          best: Number(row.best || row.score || 0),
           ready: true
         }));
         pvpMode = normalizePvpMode(payload.mode || pvpMode);
         pvpMatchActive = true;
         pvpMatchEndsAt = Number(payload.startedAt || 0) + Number(payload.durationMs || 0);
+        updatePvpControlsUi();
         renderPvpLobby();
         renderPvpHud();
       });
@@ -3674,6 +3698,20 @@
       updateDifficultyFabVisibility();
     }
 
+    function closePvpOverlayCard() {
+      if (pvpInviteCard) {
+        pvpInviteCard.classList.remove('open');
+        pvpInviteCard.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function closePvpPanelForOtherUi() {
+      closePvpOverlayCard();
+      if (pvpBackdrop && pvpBackdrop.classList.contains('open')) {
+        closePvpPanel();
+      }
+    }
+
     const duckSprites = Object.create(null);
 
     function setDuckSprite(skin, src) {
@@ -3775,6 +3813,7 @@
     }
 
     function openDifficultyPanel() {
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderDifficultyPanel();
       difficultyBackdrop.classList.add('open');
@@ -3846,6 +3885,7 @@
 
     function openTeamPanel() {
       if (teamOpen) return;
+      closePvpPanelForOtherUi();
       freezeForModal();
       teamOpen = true;
       teamBackdrop.classList.add('open');
@@ -4292,6 +4332,7 @@
 
     function openSettingsPanel() {
       if (!settingsBackdrop) return;
+      closePvpPanelForOtherUi();
       freezeForModal();
       settingsOpen = true;
       deleteConfirmBox?.classList.remove('open');
@@ -4341,6 +4382,7 @@
 
     function openSuggestionPanel() {
       if (suggestionOpen) return;
+      closePvpPanelForOtherUi();
       freezeForModal();
       suggestionOpen = true;
       suggestBackdrop.classList.add('open');
@@ -4459,8 +4501,8 @@
       replyForm.innerHTML = `
         <textarea class="suggest-textarea" maxlength="240" placeholder="Write a reply..."></textarea>
         <div class="buttons" style="justify-content:flex-end;">
+          <button type="button" class="btn-secondary hidden">Cancel</button>
           <button type="button" class="btn-primary">Post Reply</button>
-          <button type="button" class="btn-secondary">Cancel</button>
         </div>
       `;
 
@@ -4468,12 +4510,22 @@
       const postReplyBtn = replyForm.querySelector('.btn-primary');
       const cancelReplyBtn = replyForm.querySelector('.btn-secondary');
 
+      function closeReplyForm() {
+        replyArea.value = '';
+        replyForm.classList.add('hidden');
+        cancelReplyBtn.classList.add('hidden');
+      }
+
       replyBtn.onclick = () => {
         replyForm.classList.toggle('hidden');
         if (!replyForm.classList.contains('hidden')) replyArea.focus();
       };
 
-      cancelReplyBtn.onclick = () => replyForm.classList.add('hidden');
+      replyArea.addEventListener('input', () => {
+        cancelReplyBtn.classList.toggle('hidden', !String(replyArea.value || '').trim());
+      });
+
+      cancelReplyBtn.onclick = closeReplyForm;
       postReplyBtn.onclick = () => {
         const text = String(replyArea.value || '').trim();
         if (!text) {
@@ -4564,11 +4616,25 @@
       commentForm.innerHTML = `
         <textarea class="suggest-textarea" maxlength="240" placeholder="Write a comment..."></textarea>
         <div class="buttons" style="justify-content:flex-end;">
+          <button type="button" class="btn-secondary hidden">Cancel</button>
           <button type="button" class="btn-primary">Post Comment</button>
         </div>
       `;
       const commentArea = commentForm.querySelector('textarea');
+      const cancelCommentBtn = commentForm.querySelector('.btn-secondary');
       const postCommentBtn = commentForm.querySelector('.btn-primary');
+
+      function closeCommentForm() {
+        commentArea.value = '';
+        commentForm.classList.add('hidden');
+        cancelCommentBtn.classList.add('hidden');
+      }
+
+      commentArea.addEventListener('input', () => {
+        cancelCommentBtn.classList.toggle('hidden', !String(commentArea.value || '').trim());
+      });
+
+      cancelCommentBtn.onclick = closeCommentForm;
 
       postCommentBtn.onclick = () => {
         const text = String(commentArea.value || '').trim();
@@ -4676,6 +4742,7 @@
 
     function openReportPanel() {
       if (reportOpen) return;
+      closePvpPanelForOtherUi();
       freezeForModal();
       reportOpen = true;
       reportBackdrop.classList.add('open');
@@ -4948,13 +5015,8 @@
     }
 
     function showNameModal() {
-      if (authRequired || !myPlayerKey) {
-        openAccountModal();
-        setTimeout(() => accountUserInput?.focus(), 0);
-        return;
-      }
       freezeForModal();
-      nameError.textContent = '';
+      nameError.textContent = authRequired || !myPlayerKey ? 'You can still set a local name here. Account login is separate.' : '';
       usernameInput.value = playerName === 'Guest' ? '' : playerName;
       nameBackdrop.classList.add('open');
       nameBackdrop.setAttribute('aria-hidden', 'false');
@@ -4972,6 +5034,7 @@
     }
 
     function openShop() {
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderShop();
       shopBackdrop.classList.add('open');
@@ -4987,6 +5050,7 @@
     }
 
     function openLeaderboard() {
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderLeaderboards();
       leaderBackdrop.classList.add('open');
@@ -5001,6 +5065,7 @@
       unfreezeAfterModal();
     }
     function openEventsPanel() {
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderEventsPanel();
       eventsBackdrop.classList.add('open');
@@ -5016,6 +5081,7 @@
     }
 
     function openTeamWarsPanel() {
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderTeamWarsPanel();
       teamWarsBackdrop.classList.add('open');
@@ -5032,6 +5098,7 @@
 
     function openMultiplayerPanel() {
       setupMultiplayerSocket();
+      closePvpPanelForOtherUi();
       freezeForModal();
       renderMultiplayerPanel();
       multiplayerBackdrop.classList.add('open');
@@ -6734,6 +6801,15 @@
         return;
       }
 
+      if (!myPlayerKey || authRequired) {
+        updatePlayerName(clean);
+        hideNameModal();
+        persistGameData(true);
+        renderShop();
+        toastMsg('Name updated locally.');
+        return;
+      }
+
       google.script.run
         .withSuccessHandler((res) => {
           if (res && res.ok) {
@@ -6971,6 +7047,7 @@
     }
 
     function openChat() {
+      closePvpPanelForOtherUi();
       chatPanel.classList.remove('hidden');
       chatPanel.style.display = 'flex';
       chatPanel.setAttribute('aria-hidden', 'false');
