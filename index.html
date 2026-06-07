@@ -1157,6 +1157,11 @@
       color: rgba(255,255,255,0.42);
     }
 
+    .report-hacker-wrap {
+      display: grid;
+      gap: 8px;
+    }
+
     .report-categories {
       display: grid;
       gap: 12px;
@@ -2218,9 +2223,12 @@
                 <option value="Cheat">Cheat</option>
                 <option value="Other">Other</option>
               </select>
-              <select id="hackerTargetSelect" class="name-input">
-                <option value="">Select hacker account</option>
-              </select>
+              <div id="hackerTargetWrap" class="report-hacker-wrap hidden">
+                <div id="hackerTargetLabel" class="tiny">Player: select a player to accuse of hacking.</div>
+                <select id="hackerTargetSelect" class="name-input">
+                  <option value="">Select hacker account</option>
+                </select>
+              </div>
               <input id="reportTitleInput" class="name-input" type="text" maxlength="48" placeholder="Short title" />
               <textarea id="reportDetailsInput" class="report-textarea" maxlength="240" placeholder="Explain the problem..."></textarea>
               <div class="buttons" style="justify-content:flex-end;">
@@ -2508,6 +2516,8 @@
     const inviteUserInput = document.getElementById('inviteUserInput');
     const inviteUserBtn = document.getElementById('inviteUserBtn');
     const reportCategoryInput = document.getElementById('reportCategoryInput');
+    const hackerTargetWrap = document.getElementById('hackerTargetWrap');
+    const hackerTargetLabel = document.getElementById('hackerTargetLabel');
     const reportTitleInput = document.getElementById('reportTitleInput');
     const reportDetailsInput = document.getElementById('reportDetailsInput');
     const submitReportBtn = document.getElementById('submitReportBtn');
@@ -2675,6 +2685,7 @@
         { id: 'shield', name: 'Shield', emoji: '🛡️', cost: 22, desc: 'Survive one crash.' },
         { id: 'magnet', name: 'Coin Magnet', emoji: '🧲', cost: 20, desc: 'Pull coins toward you for a run.' },
         { id: 'slowmo', name: 'Slow Time', emoji: '⏱️', cost: 16, desc: 'Pipe speed gets calmer for a run.' },
+        { id: 'coinMultiplier', name: 'Coin Multiplier', emoji: '✨', cost: 5, desc: 'Choose a duration and stack coin rewards.' },
         { id: 'burst', name: 'Coin Burst', emoji: '💰', cost: 28, desc: 'Instant bonus coins.' }
       ]
     };
@@ -2864,6 +2875,63 @@
     let cheatBusy = false;
 
     const pendingBoosts = { shield: 0, magnet: 0, slowmo: 0 };
+    let coinMultiplierBoosts = [];
+
+    function normalizeCoinMultiplierBoosts(list) {
+      const now = Date.now();
+      return (Array.isArray(list) ? list : [])
+        .map((boost, index) => {
+          const startedAt = Number(boost && boost.startedAt ? boost.startedAt : now) || now;
+          const duration = Math.max(60, Math.floor(Number(boost && boost.duration ? boost.duration : boost && boost.durationMs ? Number(boost.durationMs) / 1000 : 60) || 60));
+          const expiresAt = Number(boost && boost.expiresAt ? boost.expiresAt : startedAt + (duration * 1000)) || (startedAt + (duration * 1000));
+          return {
+            id: String(boost && (boost.id || boost.key) ? (boost.id || boost.key) : `${startedAt}-${index}`),
+            startedAt,
+            duration,
+            expiresAt,
+            label: 'Coin Multiplier'
+          };
+        })
+        .filter((boost) => Number(boost.expiresAt || 0) > now)
+        .sort((a, b) => Number(a.expiresAt || 0) - Number(b.expiresAt || 0));
+    }
+
+    function getActiveCoinMultiplierBoosts(now = Date.now()) {
+      coinMultiplierBoosts = normalizeCoinMultiplierBoosts(coinMultiplierBoosts);
+      return coinMultiplierBoosts.filter((boost) => Number(boost.expiresAt || 0) > now);
+    }
+
+    function getCoinMultiplierValue(now = Date.now()) {
+      return 1 + getActiveCoinMultiplierBoosts(now).length;
+    }
+
+    function getCoinMultiplierCost(seconds) {
+      const duration = Math.max(60, Math.floor(Number(seconds) || 60));
+      return Math.max(5, Math.ceil(duration / 60) * 5);
+    }
+
+    function addCoinMultiplierBoost(seconds) {
+      const duration = Math.max(60, Math.floor(Number(seconds) || 60));
+      const cost = getCoinMultiplierCost(duration);
+      if (coins < cost) {
+        toastMsg(`Need ${cost - coins} more coins.`);
+        return false;
+      }
+      coins -= cost;
+      coinMultiplierBoosts.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        startedAt: Date.now(),
+        duration,
+        expiresAt: Date.now() + (duration * 1000),
+        label: 'Coin Multiplier'
+      });
+      coinMultiplierBoosts = normalizeCoinMultiplierBoosts(coinMultiplierBoosts);
+      syncTopbar();
+      persistGameData(true);
+      renderShop();
+      toastMsg(`Coin multiplier x${getCoinMultiplierValue()} active for ${duration}s.`);
+      return true;
+    }
 
     const COIN_VARIANTS = [
       {
@@ -3635,7 +3703,7 @@
     function syncRoomPresence(force = false) {
       if (!multiplayerSocket || !multiplayerConnected) return;
       const now = Date.now();
-      if (!force && now - multiplayerLastEmit < 80) return;
+      if (!force && now - multiplayerLastEmit < 40) return;
       multiplayerLastEmit = now;
 
       const payload = {
@@ -4517,8 +4585,13 @@
       }
 
       replyBtn.onclick = () => {
-        replyForm.classList.toggle('hidden');
-        if (!replyForm.classList.contains('hidden')) replyArea.focus();
+        const opening = replyForm.classList.contains('hidden');
+        if (opening) {
+          replyForm.classList.remove('hidden');
+          replyArea.focus();
+        } else {
+          closeReplyForm();
+        }
       };
 
       replyArea.addEventListener('input', () => {
@@ -4794,6 +4867,13 @@
       body.className = 'report-card-body';
       body.textContent = details;
 
+      if (String(report.category || '') === 'Hacker') {
+        const targetLine = document.createElement('div');
+        targetLine.className = 'tiny';
+        targetLine.textContent = `Player: ${String(report.targetUsername || report.targetName || report.targetAccountId || 'Unknown')} is accused of hacking.`;
+        body.prepend(targetLine);
+      }
+
       const actions = document.createElement('div');
       actions.className = 'report-actions';
 
@@ -4842,6 +4922,7 @@
       reportBoard.innerHTML = '';
       const targets = Array.isArray(reportData.accounts) ? reportData.accounts : [];
       syncHackerTargets(targets);
+      updateReportHackerUi();
       categories.forEach((category) => {
         const bucket = reports.filter((r) => String(r.category || 'Other') === category);
         const section = document.createElement('div');
@@ -4894,16 +4975,15 @@
         })
         .getReportData();
 
-      if (String(myPlayerKey || '') === '1' || String(myPlayerKey || '') === '2') {
-        google.script.run
-          .withSuccessHandler((res) => {
-            if (res && res.ok) {
-              reportData.accounts = Array.isArray(res.accounts) ? res.accounts : [];
-              syncHackerTargets(reportData.accounts);
-            }
-          })
-          .getAccountListForModeration();
-      }
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (res && res.ok) {
+            reportData.accounts = Array.isArray(res.accounts) ? res.accounts : [];
+            syncHackerTargets(reportData.accounts);
+          }
+        })
+        .withFailureHandler(() => {})
+        .getAccountListForModeration();
     }
 
     function submitReport() {
@@ -4911,8 +4991,8 @@
       const title = String(reportTitleInput.value || '').trim();
       const details = String(reportDetailsInput.value || '').trim();
       const selectedOption = hackerTargetSelect && hackerTargetSelect.selectedIndex >= 0 ? hackerTargetSelect.options[hackerTargetSelect.selectedIndex] : null;
-      const targetAccountId = String(hackerTargetSelect && hackerTargetSelect.value || '').trim();
-      const targetUsername = String(selectedOption && selectedOption.textContent || '').replace(/\s*\(#.*$/, '').replace(/\s*\[BANNED\]$/, '').trim();
+      const targetAccountId = category === 'Hacker' ? String(hackerTargetSelect && hackerTargetSelect.value || '').trim() : '';
+      const targetUsername = category === 'Hacker' ? String(selectedOption && selectedOption.textContent || '').replace(/\s*\(#.*$/, '').replace(/\s*\[BANNED\]$/, '').trim() : '';
 
       if (!title && !details) {
         toastMsg('Write a report first.');
@@ -4938,6 +5018,7 @@
           reportTitleInput.value = '';
           reportDetailsInput.value = '';
           if (hackerTargetSelect) hackerTargetSelect.value = '';
+          updateReportHackerUi();
           loadReportData(true);
         })
         .withFailureHandler((err) => {
@@ -5262,7 +5343,8 @@
         multiplayerEndTime: Number(multiplayerEndTime || 0),
         roomId: String(roomState && roomState.id ? roomState.id : ''),
         serverKey: String(roomState && roomState.serverKey ? roomState.serverKey : ''),
-        blockPvpRequests: Boolean(blockPvpRequests)
+        blockPvpRequests: Boolean(blockPvpRequests),
+        coinMultiplierBoosts: normalizeCoinMultiplierBoosts(coinMultiplierBoosts)
       };
 
       google.script.run
@@ -5301,6 +5383,7 @@
       duck.skin = ownedSkins.has(account.activeSkin) ? account.activeSkin : 'classic';
       shieldCharges = Number(account.shieldCharges || 0);
       blockPvpRequests = Boolean(account.blockPvpRequests || false);
+      coinMultiplierBoosts = normalizeCoinMultiplierBoosts(account.coinMultiplierBoosts || []);
       multiplayerEndTime = Number(account.multiplayerEndTime || 0);
       multiplayerActive = Number(account.multiplayerEndTime || 0) > Date.now();
       myPlayerKey = String(d.playerKey || account.playerKey || account.accountId || '');
@@ -5669,7 +5752,8 @@
 
     function collectCoin(amount = 1) {
       const mult = magnetTimer > 0 ? 2 : 1;
-      coins += Math.max(1, Math.floor(Number(amount) || 1)) * mult;
+      const coinMult = getCoinMultiplierValue();
+      coins += Math.max(1, Math.floor(Number(amount) || 1)) * mult * coinMult;
       syncTopbar();
       particlesBurst(duck.x + 8, duck.y, 8, '#ffd54a');
       persistGameData(true);
@@ -5686,8 +5770,8 @@
       const liveRun = state === 'playing' || (state === 'paused' && modalFreezeDepth > 0 && modalResumeState === 'playing');
 
       if (id === 'burst') {
-        coins += 5;
-        toastMsg('Coin Burst: +5 coins.');
+        coins += 5 * getCoinMultiplierValue();
+        toastMsg(`Coin Burst: +${5 * getCoinMultiplierValue()} coins.`);
       } else if (liveRun) {
         if (id === 'shield') {
           shieldCharges += 1;
@@ -6473,6 +6557,7 @@
     function getRemoteDuckScreenPos(p) {
       const localDistance = Number(runDistance || 0);
       const remoteDistance = Number(p && (p.distance ?? ((Number(p.progress) || 0) * 255) ?? ((Number(p.score) || 0) * 255)) || 0);
+      const remoteY = Number(p && p.y) || Number(duck.y) || H * 0.5;
       const distanceGap = remoteDistance - localDistance;
       const progressGap = distanceGap / 255;
       const pipeGap = Math.abs(progressGap);
@@ -6481,10 +6566,9 @@
         return { x: -9999, y: -9999, progressGap, pipeGap };
       }
 
-      const pxPerDistance = Math.max(0.9, (Number(speed) || DEFAULT_START_SPEED) / 255);
+      const pxPerDistance = Math.max(0.95, (Number(speed) || DEFAULT_START_SPEED) / 255);
       const x = clamp((Number(duck.x) || W * 0.25) + distanceGap * pxPerDistance, 52, Math.max(52, W - 52));
-      const y = Number(p && p.y) || Number(duck.y) || H * 0.5;
-      return { x, y, progressGap, pipeGap };
+      return { x, y: remoteY, progressGap, pipeGap };
     }
 
     function isRemoteDuckVisible(p) {
@@ -6580,7 +6664,7 @@
       updateMultiplayerTimerText();
       if (multiplayerConnected) {
         roomSyncTimer += dt;
-        if (roomSyncTimer >= 0.9) {
+        if (roomSyncTimer >= 0.05) {
           roomSyncTimer = 0;
           syncRoomPresence();
         }
@@ -6712,6 +6796,50 @@
           return card;
         }
 
+        if (item.id === 'coinMultiplier') {
+          const card = document.createElement('div');
+          card.className = 'item';
+          card.innerHTML = `
+            <div class="icon">${item.emoji}</div>
+            <div>
+              <h4>${item.name}</h4>
+              <p>${item.desc}</p>
+              <div class="tiny">Base cost 5 coins · Minimum 60 seconds · Stackable forever while active.</div>
+            </div>
+            <div class="actions"></div>
+          `;
+
+          const actions = card.querySelector('.actions');
+          const durationInput = document.createElement('input');
+          durationInput.type = 'number';
+          durationInput.min = '60';
+          durationInput.step = '1';
+          durationInput.value = '60';
+          durationInput.className = 'name-input';
+          durationInput.style.width = '120px';
+          durationInput.style.textAlign = 'center';
+
+          const costText = document.createElement('div');
+          costText.className = 'tiny';
+          costText.textContent = `Cost: ${getCoinMultiplierCost(60)} coins`;
+
+          durationInput.addEventListener('input', () => {
+            const seconds = Math.max(60, Math.floor(Number(durationInput.value) || 60));
+            durationInput.value = String(seconds);
+            costText.textContent = `Cost: ${getCoinMultiplierCost(seconds)} coins`;
+          });
+
+          const buy = document.createElement('button');
+          buy.className = 'btn-primary';
+          buy.textContent = 'Activate';
+          buy.onclick = () => addCoinMultiplierBoost(durationInput.value);
+
+          actions.appendChild(durationInput);
+          actions.appendChild(buy);
+          actions.appendChild(costText);
+          return card;
+        }
+
         const count = inventory[item.id] || 0;
         const card = document.createElement('div');
         card.className = 'item';
@@ -6753,11 +6881,13 @@
         return card;
       });
 
+      const activeCoinBoosts = getActiveCoinMultiplierBoosts();
       const equipped = [
         { icon: '🎨', title: 'Skin', text: SHOP.skins.find(s => s.id === duck.skin)?.name || 'Classic Duck' },
         { icon: '🛡️', title: 'Shield', text: `Active: ${shieldCharges}` },
         { icon: '🧲', title: 'Magnet', text: `Active: ${magnetTimer.toFixed(1)}s` },
         { icon: '⏱️', title: 'Slow Time', text: `Active: ${slowmoTimer.toFixed(1)}s` },
+        { icon: '✨', title: 'Coin Multiplier', text: activeCoinBoosts.length ? `x${getCoinMultiplierValue()} · ${activeCoinBoosts.length} stack${activeCoinBoosts.length === 1 ? '' : 's'}` : 'No active boost' },
         { icon: '💰', title: 'Coin Burst', text: `In stock: ${inventory.burst || 0}` }
       ];
 
@@ -6774,6 +6904,7 @@
         { label: 'Shield Charges', value: shieldCharges, icon: '🛡️' },
         { label: 'Magnet Timer', value: `${magnetTimer.toFixed(1)}s`, icon: '🧲' },
         { label: 'Slow Time Timer', value: `${slowmoTimer.toFixed(1)}s`, icon: '⏱️' },
+        { label: 'Coin Multiplier', value: activeCoinBoosts.length ? `x${getCoinMultiplierValue()} (${activeCoinBoosts.length} stack${activeCoinBoosts.length === 1 ? '' : 's'})` : 'Inactive', icon: '✨' },
         { label: 'Coin Burst', value: inventory.burst || 0, icon: '💰' }
       ];
 
@@ -6855,6 +6986,22 @@
       if (modalFreezeDepth > 0) unfreezeAfterModal();
     }
 
+    function updateReportHackerUi() {
+      if (!reportCategoryInput || !hackerTargetWrap || !hackerTargetSelect || !hackerTargetLabel) return;
+      const isHacker = String(reportCategoryInput.value || 'Other') === 'Hacker';
+      hackerTargetWrap.classList.toggle('hidden', !isHacker);
+      hackerTargetSelect.disabled = !isHacker;
+      if (!isHacker) {
+        hackerTargetSelect.value = '';
+        hackerTargetLabel.textContent = 'Player: select a player to accuse of hacking.';
+      } else {
+        const selected = String(hackerTargetSelect.value || '').trim();
+        const selectedOption = selected && hackerTargetSelect.selectedIndex >= 0 ? hackerTargetSelect.options[hackerTargetSelect.selectedIndex] : null;
+        const targetName = String(selectedOption && selectedOption.textContent || '').replace(/\s*\(#.*$/, '').replace(/\s*\[BANNED\]$/, '').trim();
+        hackerTargetLabel.textContent = `Player: ${targetName || 'select a player'} is accused of hacking.`;
+      }
+    }
+
     function syncHackerTargets(accounts) {
       if (!hackerTargetSelect) return;
       const list = Array.isArray(accounts) ? accounts : [];
@@ -6869,6 +7016,14 @@
       }
 
       if (current) hackerTargetSelect.value = current;
+      updateReportHackerUi();
+    }
+
+    if (reportCategoryInput) {
+      reportCategoryInput.addEventListener('change', updateReportHackerUi);
+    }
+    if (hackerTargetSelect) {
+      hackerTargetSelect.addEventListener('change', updateReportHackerUi);
     }
 
     function createAccountNow() {
@@ -7435,6 +7590,7 @@
     updateDifficultyButton();
     updateDifficultyFabVisibility();
     setupMultiplayerSocket();
+    closeChat();
     loadServerData();
 
     const difficultyFabObserverTargets = [
