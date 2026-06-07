@@ -23,7 +23,7 @@ const REPORT_MAX = 200;
 const SUGGEST_CATEGORIES = ['Gameplay', 'Shop', 'Teams', 'UI', 'Multiplayer', 'Other'];
 const SUGGEST_MAX = 200;
 const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
-const MULTIPLAYER_TIMEOUT_MS = 12000;
+const MULTIPLAYER_TIMEOUT_MS = 60000;
 
 const PVP_MODES = {
   easy: { label: 'Easy', reward: 10 },
@@ -598,7 +598,7 @@ function createTeam(data, req) {
 
 function voteReactionTarget(item, vote, key) {
   item.reactions = item.reactions && typeof item.reactions === 'object' ? item.reactions : {};
-  if (item.reactions[key] === vote) delete item.reactions[key]; else item.reactions[key] = vote;
+  item.reactions[key] = vote;
   recalcVotes(item);
 }
 
@@ -622,6 +622,7 @@ function snapshotPlayer(player) {
     x: Number(player.x) || 0,
     y: Number(player.y) || 0,
     score: Number(player.score) || 0,
+    best: Number(player.best) || 0,
     rot: Number(player.rot) || 0,
     skin: String(player.skin || 'classic'),
     alive: player.alive !== false,
@@ -651,7 +652,7 @@ function clampPvpDuration(ms) {
   return Math.max(PVP_MIN_MS, Math.min(PVP_MAX_MS, Number.isFinite(n) ? n : 60_000));
 }
 function pvpRoomSnapshot(room) {
-  return { id: room.id, hostSocketId: room.hostSocketId, hostUsername: room.hostUsername, mode: room.mode, durationMs: room.durationMs, startedAt: room.startedAt || 0, status: room.status, players: room.players.map(p => ({ socketId: p.socketId, accountId: p.accountId, username: p.username, score: p.score || 0, ready: Boolean(p.ready) })) };
+  return { id: room.id, hostSocketId: room.hostSocketId, hostUsername: room.hostUsername, mode: room.mode, durationMs: room.durationMs, startedAt: room.startedAt || 0, status: room.status, players: room.players.map(p => ({ socketId: p.socketId, accountId: p.accountId, username: p.username, score: p.score || 0, best: Number(p.best || 0), ready: Boolean(p.ready) })) };
 }
 function getConnectedPlayer(socketId) { return multiplayerState.get(socketId) || null; }
 function getSocketByUsername(username) {
@@ -667,7 +668,7 @@ function emitRoomState(room) {
   for (const p of room.players) io.to(p.socketId).emit('pvp-room-state', snapshot);
 }
 function emitRoomScoreboard(room) {
-  const board = room.players.slice().sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0)).map((p, i) => ({ rank: i + 1, socketId: p.socketId, accountId: p.accountId, username: p.username, score: Number(p.score || 0) }));
+  const board = room.players.slice().sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0)).map((p, i) => ({ rank: i + 1, socketId: p.socketId, accountId: p.accountId, username: p.username, score: Number(p.score || 0), best: Number(p.best || 0) }));
   for (const p of room.players) io.to(p.socketId).emit('pvp-scoreboard', { roomId: room.id, mode: room.mode, durationMs: room.durationMs, startedAt: room.startedAt || 0, board });
 }
 function removeFromPvpRoom(socketId) {
@@ -711,7 +712,7 @@ function endPvpRoom(room, reason = 'time') {
 function startPvpTimer(room) { clearTimeout(room.timer); room.timer = setTimeout(() => endPvpRoom(room, 'time'), clampPvpDuration(room.durationMs)); }
 function createPvpRoom(hostSocketId, hostPlayer, mode = 'normal', durationMs = 60_000) {
   const id = crypto.randomUUID();
-  const room = { id, hostSocketId, hostUsername: hostPlayer.username, mode: normalizePvpMode(mode), durationMs: clampPvpDuration(durationMs), status: 'lobby', startedAt: 0, timer: null, players: [{ socketId: hostSocketId, accountId: hostPlayer.accountId || '', username: hostPlayer.username || 'Guest', score: 0, ready: true }] };
+  const room = { id, hostSocketId, hostUsername: hostPlayer.username, mode: normalizePvpMode(mode), durationMs: clampPvpDuration(durationMs), status: 'lobby', startedAt: 0, timer: null, players: [{ socketId: hostSocketId, accountId: hostPlayer.accountId || '', username: hostPlayer.username || 'Guest', score: 0, best: Number(hostPlayer.best || 0), ready: true }] };
   pvpRooms.set(id, room);
   return room;
 }
@@ -719,7 +720,7 @@ function joinPvpRoom(room, socketId, playerInfo) {
   if (!room) return false;
   if (room.players.some(p => p.socketId === socketId)) return true;
   if (room.players.length >= PVP_MAX_PLAYERS) return false;
-  room.players.push({ socketId, accountId: playerInfo.accountId || '', username: playerInfo.username || 'Guest', score: 0, ready: true });
+  room.players.push({ socketId, accountId: playerInfo.accountId || '', username: playerInfo.username || 'Guest', score: 0, best: Number(playerInfo.best || 0), ready: true });
   return true;
 }
 
@@ -1325,7 +1326,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('pvp-request', (payload = {}, ack) => {
-    const host = getConnectedPlayer(socket.id) || { accountId: socket.data.playerInfo.accountId || '', username: socket.data.playerInfo.username || 'Guest' };
+    const host = getConnectedPlayer(socket.id) || { accountId: socket.data.playerInfo.accountId || '', username: socket.data.playerInfo.username || 'Guest', best: Number(socket.data.playerInfo.best || 0) };
     const targetUsername = sanitizeUsername(payload.targetUsername);
     const targetSocketId = getSocketByUsername(targetUsername);
     if (!targetUsername) { if (typeof ack === 'function') ack({ ok: false, error: 'Missing target username.' }); return; }
@@ -1334,7 +1335,7 @@ io.on('connection', (socket) => {
     if (targetPlayer && targetPlayer.blockPvpRequests) { if (typeof ack === 'function') ack({ ok: false, error: 'That player blocks PvP requests.' }); return; }
     let room = null;
     for (const r of pvpRooms.values()) { if (r.hostSocketId === socket.id) { room = r; break; } }
-    if (!room) { room = createPvpRoom(socket.id, { accountId: host.accountId || '', username: host.username || 'Guest' }, payload.mode || 'normal', payload.durationMs || 60_000); socket.join(room.id); } else { room.mode = normalizePvpMode(payload.mode || room.mode); room.durationMs = clampPvpDuration(payload.durationMs || room.durationMs); }
+    if (!room) { room = createPvpRoom(socket.id, { accountId: host.accountId || '', username: host.username || 'Guest', best: Number(host.best || 0) }, payload.mode || 'normal', payload.durationMs || 60_000); socket.join(room.id); } else { room.mode = normalizePvpMode(payload.mode || room.mode); room.durationMs = clampPvpDuration(payload.durationMs || room.durationMs); }
     const invite = { requestId: crypto.randomUUID(), roomId: room.id, hostSocketId: socket.id, hostUsername: host.username || 'Guest', targetUsername, mode: room.mode, durationMs: room.durationMs, ts: Date.now() };
     io.to(targetSocketId).emit('pvp-invite', invite);
     if (typeof ack === 'function') ack({ ok: true, invite });
@@ -1348,7 +1349,7 @@ io.on('connection', (socket) => {
     if (!accept) { const declinePayload = { roomId: room.id, hostSocketId: room.hostSocketId, username: me.username || 'Guest' }; io.to(room.hostSocketId).emit('pvp-invite-declined', declinePayload); io.to(room.hostSocketId).emit('pvp-request-declined', declinePayload); if (typeof ack === 'function') ack({ ok: true }); return; }
     if (room.players.length >= PVP_MAX_PLAYERS) { if (typeof ack === 'function') ack({ ok: false, error: 'PvP room is full.' }); return; }
     const wasInPvp = Boolean(socket.data.inPvp);
-    const ok = joinPvpRoom(room, socket.id, { accountId: me.accountId || '', username: me.username || 'Guest' });
+    const ok = joinPvpRoom(room, socket.id, { accountId: me.accountId || '', username: me.username || 'Guest', best: Number(me.best || 0) });
     if (!ok) { if (typeof ack === 'function') ack({ ok: false, error: 'PvP room is full.' }); return; }
     socket.join(room.id);
     socket.data.inPvp = true;
@@ -1374,7 +1375,7 @@ io.on('connection', (socket) => {
     if (!targetUsername || !targetSocketId) { if (typeof ack === 'function') ack({ ok: false, error: 'Player not found.' }); return; }
     const targetPlayer = getConnectedPlayer(targetSocketId);
     if (targetPlayer && targetPlayer.blockPvpRequests) { if (typeof ack === 'function') ack({ ok: false, error: 'That player blocks PvP requests.' }); return; }
-    io.to(targetSocketId).emit('pvp-room-invite', { roomId: room.id, hostUsername: host ? host.username : room.hostUsername, mode: room.mode, durationMs: room.durationMs });
+    io.to(targetSocketId).emit('pvp-room-invite', { roomId: room.id, hostSocketId: room.hostSocketId, hostUsername: host ? host.username : room.hostUsername, mode: room.mode, durationMs: room.durationMs });
     if (typeof ack === 'function') ack({ ok: true });
   });
 
