@@ -2604,7 +2604,7 @@
       refreshDatabase: { url: '/api/refresh', method: 'GET' }
     };
 
-    const STATIC_HOST = /(^|\\.)github\\.io$/i.test(window.location.hostname);
+    const STATIC_HOST = /(^|\.)github\.io$/i.test(window.location.hostname);
     const STATIC_STORAGE_KEY = 'flappyDuckStaticSaveV1';
 
     function getStaticSave() {
