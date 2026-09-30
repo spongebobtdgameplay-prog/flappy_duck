@@ -9,7 +9,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: true, credentials: true } });
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const DATA_FILE = path.join(__dirname, 'data.json');
 const INDEX_FILE = path.join(__dirname, 'index.html');
 const AUTH_COOKIE = 'fd_auth';
@@ -1441,4 +1442,10 @@ app.use((req, res, next) => {
   return sendIndex(res);
 });
 
-server.listen(PORT, () => { console.log(`Server running on http://localhost:${PORT}`); });
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true, service: 'flappy-duck', uptime: process.uptime() });
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
+});
