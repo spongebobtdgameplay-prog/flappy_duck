@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" href="./Flappy Duck Icon" type="image/png" />
+  <link rel="icon" href="./Flappy%20Duck%20Icon.png" type="image/png" />
   <title>Flappy Duck GOATED WITH MUTIPLAYER 🔥</title>
   <style>
     :root {
@@ -2431,7 +2431,6 @@
     <div id="deathFeed" class="death-feed"></div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -2605,6 +2604,65 @@
       refreshDatabase: { url: '/api/refresh', method: 'GET' }
     };
 
+    const STATIC_HOST = /(^|\\.)github\\.io$/i.test(window.location.hostname);
+    const STATIC_STORAGE_KEY = 'flappyDuckStaticSaveV1';
+
+    function getStaticSave() {
+      try {
+        const raw = localStorage.getItem(STATIC_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (err) {}
+      return {
+        accountId: 'local-player',
+        playerKey: 'local-player',
+        username: 'Guest',
+        best: 0,
+        coins: 0,
+        inventory: { shield: 0, magnet: 0, slowmo: 0, burst: 0 },
+        ownedSkins: ['classic'],
+        activeSkin: 'classic',
+        shieldCharges: 0,
+        blockPvpRequests: false,
+        multiplayerEndTime: 0,
+        theme: 'day'
+      };
+    }
+
+    function setStaticSave(patch) {
+      const next = { ...getStaticSave(), ...(patch || {}) };
+      try { localStorage.setItem(STATIC_STORAGE_KEY, JSON.stringify(next)); } catch (err) {}
+      return next;
+    }
+
+    function staticServerCall(name, args) {
+      const current = getStaticSave();
+      switch (name) {
+        case 'getGameData':
+        case 'getAccountSession':
+          return { ...current, account: current, playerKey: current.playerKey };
+        case 'saveGameData': {
+          const payload = args && args[0] && typeof args[0] === 'object' ? args[0] : {};
+          const saved = setStaticSave(payload);
+          return { ok: true, data: saved, account: saved, playerKey: saved.playerKey, leaderboards: { highscores: [], coins: [] } };
+        }
+        case 'saveUsername': {
+          const username = String((args && args[0]) || '').trim() || 'Guest';
+          const saved = setStaticSave({ username });
+          return { ok: true, username, account: saved, data: saved };
+        }
+        case 'getLeaderboards': return { highscores: [], coins: [] };
+        case 'getChatMessages': return [];
+        case 'getReportData': return { categories: [], reports: [] };
+        case 'getSuggestionData': return { categories: [], suggestions: [] };
+        case 'getTeamData': return { teams: [], myTeam: null, invites: [], requests: [] };
+        case 'getEvents': return { events: [] };
+        case 'getTeamWarsData': return { teams: [], wars: [] };
+        case 'refreshDatabase': return { ok: true, data: current, account: current, playerKey: current.playerKey, leaderboards: { highscores: [], coins: [] }, chat: { messages: [] }, teams: { teams: [], myTeam: null, invites: [], requests: [] }, reports: { categories: [], reports: [] }, suggestions: { categories: [], suggestions: [] }, events: { events: [] }, teamWars: { teams: [], wars: [] } };
+        case 'logoutAccount': return { ok: true };
+        default: return { ok: true };
+      }
+    }
+
     function buildRunner(successHandler, failureHandler) {
       return new Proxy({}, {
         get(_target, prop) {
@@ -2628,6 +2686,17 @@
               ? route.encode(args)
               : (args.length <= 1 ? (args[0] ?? {}) : args);
 
+            if (STATIC_HOST) {
+              try {
+                const data = staticServerCall(name, args);
+                if (successHandler) successHandler(data);
+              } catch (err) {
+                if (failureHandler) failureHandler(err);
+                else console.error(err);
+              }
+              return;
+            }
+
             const request = {
               method: route.method || 'POST',
               credentials: 'include',
@@ -2649,7 +2718,7 @@
                 if (failureHandler) failureHandler(err);
                 else console.error(err);
               });
-          };
+
         }
       });
     }
@@ -3455,6 +3524,12 @@
 
 
     function setupMultiplayerSocket() {
+      if (STATIC_HOST) {
+        multiplayerConnected = false;
+        multiplayerSocket = null;
+        renderMultiplayerPanel();
+        return;
+      }
       if (multiplayerSocket || typeof io !== 'function') return;
 
       multiplayerSocket = io({
@@ -5370,6 +5445,10 @@
     }
 
     function loadServerData() {
+      if (STATIC_HOST) {
+        applyServerData(staticServerCall('getGameData', []));
+        return;
+      }
       google.script.run
         .withSuccessHandler(applyServerData)
         .withFailureHandler((err) => {
